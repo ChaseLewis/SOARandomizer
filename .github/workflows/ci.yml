@@ -21,7 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run cargo check
-        run: cargo check --workspace --exclude skies-randomizer --exclude gc_fst --all-targets
+        run: cargo check -p alx -p alx_rs --all-targets
 
   test:
     name: Test
@@ -38,7 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run tests
-        run: cargo test --workspace --exclude skies-randomizer --exclude gc_fst
+        run: cargo test -p alx -p alx_rs
 
   fmt:
     name: Format
@@ -68,7 +68,7 @@ jobs:
           components: clippy
 
       - name: Run clippy
-        run: cargo clippy --workspace --exclude skies-randomizer --exclude gc_fst -- -D warnings
+        run: cargo clippy -p alx -p alx_rs -- -D warnings
 
   build:
     name: Build
