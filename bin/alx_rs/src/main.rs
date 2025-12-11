@@ -145,8 +145,8 @@ fn run_import(iso_path: &Path, import_dir: &Path, output_iso: Option<&Path>, aut
         
         println!("Copying ISO to output path...");
         fs::copy(iso_path, output_path)?;
-        println!("  Copy complete ({:.1} MB)", 
-            fs::metadata(output_path)?.len() as f64 / 1_000_000.0);
+        println!("  Copy complete ({:.1} GB)", 
+            fs::metadata(output_path)?.len() as f64 / 1_000_000_000.0);
         println!();
         
         output_path.to_path_buf()
