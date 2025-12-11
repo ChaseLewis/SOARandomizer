@@ -21,7 +21,7 @@ impl CsvExporter {
         let mut wtr = csv::Writer::from_writer(writer);
 
         // Write header matching original ALX format
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "PC Flags",
@@ -112,7 +112,7 @@ impl CsvExporter {
     pub fn export_armors<W: Write>(armors: &[Armor], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "PC Flags",
@@ -210,7 +210,7 @@ impl CsvExporter {
         let mut wtr = csv::Writer::from_writer(writer);
 
         // Weapons have a different structure than armor/accessories
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "PC ID",
@@ -286,7 +286,7 @@ impl CsvExporter {
         let mut wtr = csv::Writer::from_writer(writer);
 
         // Write header matching original ALX format
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Element ID",
@@ -414,7 +414,7 @@ impl CsvExporter {
     pub fn export_usable_items<W: Write>(items: &[UsableItem], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Occasion Flags",
@@ -504,7 +504,7 @@ impl CsvExporter {
     pub fn export_special_items<W: Write>(items: &[SpecialItem], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Sell%",
@@ -543,7 +543,7 @@ impl CsvExporter {
         let mut wtr = csv::Writer::from_writer(writer);
 
         // Header matching reference ALX format (76 columns)
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Age",
@@ -781,7 +781,7 @@ impl CsvExporter {
     pub fn export_character_magic<W: Write>(magic: &[CharacterMagic], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Element ID",
@@ -961,7 +961,7 @@ impl CsvExporter {
     ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&["Entry ID", "Item ID", "[Item Name]", "Amount"])?;
+        wtr.write_record(["Entry ID", "Item ID", "[Item Name]", "Amount"])?;
 
         for chest in chests {
             let item_name = item_db.name_or_default(chest.item_id);
@@ -981,7 +981,7 @@ impl CsvExporter {
     pub fn export_crew_members<W: Write>(crew: &[CrewMember], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Position ID",
@@ -1028,7 +1028,7 @@ impl CsvExporter {
     pub fn export_playable_ships<W: Write>(ships: &[PlayableShip], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "MAXHP",
@@ -1090,7 +1090,7 @@ impl CsvExporter {
     pub fn export_ship_cannons<W: Write>(cannons: &[ShipCannon], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Ship Flags",
@@ -1174,7 +1174,7 @@ impl CsvExporter {
     ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Ship Flags",
@@ -1254,7 +1254,7 @@ impl CsvExporter {
     pub fn export_ship_items<W: Write>(items: &[ShipItem], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Occasion Flags",
@@ -1393,7 +1393,7 @@ impl CsvExporter {
     pub fn export_enemy_magic<W: Write>(magic: &[EnemyMagic], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Category ID",
@@ -1443,7 +1443,7 @@ impl CsvExporter {
     pub fn export_enemy_super_moves<W: Write>(moves: &[EnemySuperMove], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Category ID",
@@ -1495,7 +1495,7 @@ impl CsvExporter {
     pub fn export_swashbucklers<W: Write>(ratings: &[Swashbuckler], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "Entry US Name",
             "Rating",
@@ -1550,7 +1550,7 @@ impl CsvExporter {
     pub fn export_exp_boosts<W: Write>(boosts: &[ExpBoost], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "[PC Name]",
             "EXP",
@@ -1593,7 +1593,7 @@ impl CsvExporter {
         let mut wtr = csv::Writer::from_writer(writer);
 
         // Header matching original ALX exactly
-        wtr.write_record(&[
+        wtr.write_record([
             "Entry ID",
             "[Filter]",
             "Entry JP Name",
@@ -1826,7 +1826,7 @@ impl CsvExporter {
     pub fn export_enemy_tasks<W: Write>(tasks: &[EnemyTask], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
-        wtr.write_record(&[
+        wtr.write_record([
             "Task ID",
             "[Filter]",
             "Enemy ID",

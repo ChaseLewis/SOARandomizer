@@ -72,7 +72,7 @@ impl ExpCurve {
 
     /// Get EXP required at a specific level (1-99).
     pub fn exp_at_level(&self, level: u8) -> Option<i32> {
-        if level >= 1 && level <= 99 {
+        if (1..=99).contains(&level) {
             Some(self.exp_values[(level - 1) as usize])
         } else {
             None

@@ -204,34 +204,31 @@ pub fn parse_dat_file(data: &[u8], filename: &str, version: &GameVersion) -> Res
     let mut cursor = Cursor::new(data);
 
     // Read the single enemy
-    match Enemy::read_one(&mut cursor, id, filename, version) {
-        Ok(enemy) => {
-            result.enemies.push(enemy);
+    if let Ok(enemy) = Enemy::read_one(&mut cursor, id, filename, version) {
+        result.enemies.push(enemy);
 
-            // Read tasks
-            let mut task_id = 1u32;
-            let remaining = data.len().saturating_sub(cursor.position() as usize);
-            let max_tasks_possible = remaining / EnemyTask::ENTRY_SIZE;
+        // Read tasks
+        let mut task_id = 1u32;
+        let remaining = data.len().saturating_sub(cursor.position() as usize);
+        let max_tasks_possible = remaining / EnemyTask::ENTRY_SIZE;
 
-            for _ in 0..max_tasks_possible.min(MAX_TASKS) {
-                if cursor.position() as usize + EnemyTask::ENTRY_SIZE > data.len() {
-                    break;
-                }
-
-                let task = EnemyTask::read_one(&mut cursor, task_id, id, filename)?;
-
-                if task.type_id == -1 && task.task_id == -1 {
-                    break;
-                }
-
-                if task.type_id != -1 {
-                    result.tasks.push(task);
-                }
-
-                task_id += 1;
+        for _ in 0..max_tasks_possible.min(MAX_TASKS) {
+            if cursor.position() as usize + EnemyTask::ENTRY_SIZE > data.len() {
+                break;
             }
+
+            let task = EnemyTask::read_one(&mut cursor, task_id, id, filename)?;
+
+            if task.type_id == -1 && task.task_id == -1 {
+                break;
+            }
+
+            if task.type_id != -1 {
+                result.tasks.push(task);
+            }
+
+            task_id += 1;
         }
-        Err(_) => {}
     }
 
     Ok(result)

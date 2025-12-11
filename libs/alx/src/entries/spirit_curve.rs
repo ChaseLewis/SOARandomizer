@@ -82,7 +82,7 @@ impl SpiritCurve {
 
     /// Get SP at a specific level (1-99).
     pub fn sp_at_level(&self, level: u8) -> Option<i8> {
-        if level >= 1 && level <= 99 {
+        if (1..=99).contains(&level) {
             Some(self.levels[(level - 1) as usize].sp)
         } else {
             None
@@ -91,7 +91,7 @@ impl SpiritCurve {
 
     /// Get MAXSP at a specific level (1-99).
     pub fn max_sp_at_level(&self, level: u8) -> Option<i8> {
-        if level >= 1 && level <= 99 {
+        if (1..=99).contains(&level) {
             Some(self.levels[(level - 1) as usize].max_sp)
         } else {
             None

@@ -186,7 +186,7 @@ pub fn format_item(id: i32, db: &ItemDatabase) -> String {
     if id == -1 {
         "None".to_string()
     } else if id >= 0x200 {
-        format!("Gold")
+        "Gold".to_string()
     } else {
         format!("{} (ID {})", name, id)
     }
@@ -201,7 +201,7 @@ pub fn format_item_with_amount(id: i32, amount: i32, db: &ItemDatabase) -> Strin
     } else {
         let name = db.name_or_default(id);
         if amount == 1 {
-            format!("{}", name)
+            name.to_string()
         } else {
             format!("{} x{}", name, amount)
         }

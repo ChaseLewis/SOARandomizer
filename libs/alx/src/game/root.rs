@@ -970,23 +970,21 @@ impl GameRoot {
         let ec_files = self.iso.list_files_matching("ecinit");
         let eb_files = self.iso.list_files_matching("ebinit");
 
-        for files_result in [ec_files, eb_files] {
-            if let Ok(files) = files_result {
-                for entry in &files {
-                    if entry.path.to_string_lossy().ends_with(".dat") {
-                        let raw_data = self.iso.read_file_direct(entry)?;
-                        let data = decompress_aklz(&raw_data)?;
+        for files in [ec_files, eb_files].into_iter().flatten() {
+            for entry in &files {
+                if entry.path.to_string_lossy().ends_with(".dat") {
+                    let raw_data = self.iso.read_file_direct(entry)?;
+                    let data = decompress_aklz(&raw_data)?;
 
-                        let filename = entry
-                            .path
-                            .file_name()
-                            .map(|s| s.to_string_lossy().to_string())
-                            .unwrap_or_else(|| "*".to_string());
+                    let filename = entry
+                        .path
+                        .file_name()
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "*".to_string());
 
-                        let parsed = parse_dat_file(&data, &filename, &self.version)?;
-                        raw_enemies.extend(parsed.enemies);
-                        all_tasks.extend(parsed.tasks);
-                    }
+                    let parsed = parse_dat_file(&data, &filename, &self.version)?;
+                    raw_enemies.extend(parsed.enemies);
+                    all_tasks.extend(parsed.tasks);
                 }
             }
         }

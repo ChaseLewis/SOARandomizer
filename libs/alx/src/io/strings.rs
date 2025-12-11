@@ -28,7 +28,7 @@ pub fn read_aligned_string(
     // Calculate the total size with block alignment
     let raw_size = end_pos - start_pos + 1; // +1 for null terminator
     let aligned_size = if block_size > 1 {
-        ((raw_size + block_size - 1) / block_size) * block_size
+        raw_size.div_ceil(block_size) * block_size
     } else {
         raw_size
     };

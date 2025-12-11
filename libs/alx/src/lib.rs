@@ -21,6 +21,11 @@
 //! // Modify and write back...
 //! ```
 
+// Allow range loops for binary reading - clippy's suggestion doesn't work with cursor reads
+#![allow(clippy::needless_range_loop)]
+// Allow many arguments for data-heavy functions
+#![allow(clippy::too_many_arguments)]
+
 pub mod csv;
 pub mod entries;
 pub mod error;
