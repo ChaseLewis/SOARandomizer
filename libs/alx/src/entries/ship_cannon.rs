@@ -1,11 +1,11 @@
 //! Ship cannon entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// A ship cannon in the game.
@@ -52,7 +52,7 @@ pub struct ShipCannon {
 impl ShipCannon {
     /// Size of one entry in bytes (US/JP).
     pub const ENTRY_SIZE: usize = 36;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_SHIP_FLAGS: usize = 17;
     const OFF_TYPE_ID: usize = 18;
@@ -85,12 +85,12 @@ impl ShipCannon {
         let ship_flags = cursor.read_u8()?;
         let type_id = cursor.read_i8()?;
         let element_id = cursor.read_i8()?;
-        
+
         // EU has extra padding
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let attack = cursor.read_i16_be()?;
         let hit = cursor.read_u16_be()?;
         let limit = cursor.read_i8()?;
@@ -103,7 +103,7 @@ impl ShipCannon {
         let order1 = cursor.read_i8()?;
         let order2 = cursor.read_i8()?;
         let _pad2 = cursor.read_u8()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -130,10 +130,10 @@ impl ShipCannon {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::SHIP_CANNON;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -141,7 +141,7 @@ impl ShipCannon {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -164,13 +164,15 @@ impl ShipCannon {
         buf[Self::OFF_SHIP_FLAGS] = self.ship_flags;
         buf[Self::OFF_TYPE_ID] = self.type_id as u8;
         buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
-        buf[Self::OFF_ATTACK..Self::OFF_ATTACK+2].copy_from_slice(&self.attack.to_be_bytes());
-        buf[Self::OFF_HIT..Self::OFF_HIT+2].copy_from_slice(&self.hit.to_be_bytes());
+        buf[Self::OFF_ATTACK..Self::OFF_ATTACK + 2].copy_from_slice(&self.attack.to_be_bytes());
+        buf[Self::OFF_HIT..Self::OFF_HIT + 2].copy_from_slice(&self.hit.to_be_bytes());
         buf[Self::OFF_LIMIT] = self.limit as u8;
         buf[Self::OFF_SP] = self.sp as u8;
         buf[Self::OFF_TRAIT_ID] = self.trait_id as u8;
-        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE+2].copy_from_slice(&self.trait_value.to_be_bytes());
-        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE + 2]
+            .copy_from_slice(&self.trait_value.to_be_bytes());
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE + 2]
+            .copy_from_slice(&self.buy_price.to_be_bytes());
         buf[Self::OFF_SELL] = self.sell_percent as u8;
         buf[Self::OFF_ORDER1] = self.order1 as u8;
         buf[Self::OFF_ORDER2] = self.order2 as u8;
@@ -199,4 +201,3 @@ mod tests {
         assert_eq!(ShipCannon::ENTRY_SIZE, 36);
     }
 }
-

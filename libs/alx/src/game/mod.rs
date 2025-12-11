@@ -1,10 +1,9 @@
 //! Game root detection and context management.
 
-mod root;
-pub mod region;
 pub mod offsets;
+pub mod region;
+mod root;
 
+pub use offsets::{id_ranges, Offsets};
+pub use region::{GameVersion, Platform, Region};
 pub use root::GameRoot;
-pub use region::{Platform, Region, GameVersion};
-pub use offsets::{Offsets, id_ranges};
-

@@ -1,13 +1,13 @@
 //! Ship accessory entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
-use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
-use crate::game::offsets::id_ranges;
-use crate::io::BinaryReader;
 use crate::entries::Trait;
+use crate::error::Result;
+use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
+use crate::io::BinaryReader;
 
 /// A ship accessory in the game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,7 +39,7 @@ pub struct ShipAccessory {
 impl ShipAccessory {
     /// Size of one entry in bytes (US/JP).
     pub const ENTRY_SIZE: usize = 40;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_SHIP_FLAGS: usize = 17;
     const OFF_TRAITS: usize = 18; // 4 traits * 4 bytes
@@ -52,26 +52,29 @@ impl ShipAccessory {
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
         let name = cursor.read_string_fixed(17)?;
         let ship_flags = cursor.read_u8()?;
-        
+
         // EU has extra padding
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let mut traits = [Trait::default(); 4];
         for i in 0..4 {
             let trait_id = cursor.read_i8()?;
             let _pad = cursor.read_u8()?;
             let trait_value = cursor.read_i16_be()?;
-            traits[i] = Trait { id: trait_id, value: trait_value };
+            traits[i] = Trait {
+                id: trait_id,
+                value: trait_value,
+            };
         }
-        
+
         let buy_price = cursor.read_u16_be()?;
         let sell_percent = cursor.read_i8()?;
         let order1 = cursor.read_i8()?;
         let order2 = cursor.read_i8()?;
         let _pad = cursor.read_u8()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -91,10 +94,10 @@ impl ShipAccessory {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::SHIP_ACCESSORY;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -102,7 +105,7 @@ impl ShipAccessory {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -125,9 +128,10 @@ impl ShipAccessory {
         for (i, t) in self.traits.iter().enumerate() {
             let off = Self::OFF_TRAITS + i * 4;
             buf[off] = t.id as u8;
-            buf[off+2..off+4].copy_from_slice(&t.value.to_be_bytes());
+            buf[off + 2..off + 4].copy_from_slice(&t.value.to_be_bytes());
         }
-        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE + 2]
+            .copy_from_slice(&self.buy_price.to_be_bytes());
         buf[Self::OFF_SELL] = self.sell_percent as u8;
         buf[Self::OFF_ORDER1] = self.order1 as u8;
         buf[Self::OFF_ORDER2] = self.order2 as u8;
@@ -156,4 +160,3 @@ mod tests {
         assert_eq!(ShipAccessory::ENTRY_SIZE, 40);
     }
 }
-

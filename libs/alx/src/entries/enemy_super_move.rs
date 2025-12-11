@@ -1,11 +1,11 @@
 //! Enemy super move entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::{BinaryReader, BinaryWriter};
 use crate::lookups::{EFFECT_NAMES, ELEMENT_NAMES, STATE_NAMES};
 
@@ -68,30 +68,30 @@ impl EnemySuperMove {
     /// Size of one entry in bytes (US/JP).
     /// 17 + 4(pad) + 1 + 1 + 1 + 2 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 2(pad) = 36 bytes
     pub const ENTRY_SIZE_US_JP: usize = 36;
-    
+
     /// Size of one entry in bytes (EU - extra padding byte after scope).
     pub const ENTRY_SIZE_EU: usize = 34;
 
     /// Read a single enemy super move from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
         let name = cursor.read_string_fixed(17)?;
-        
+
         // JP/US have 4 padding bytes after name
         if version.region != Region::Eu {
             for _ in 0..4 {
                 let _pad = cursor.read_u8()?;
             }
         }
-        
+
         let category_id = cursor.read_i8()?;
         let effect_id = cursor.read_i8()?;
         let scope_id = cursor.read_u8()?;
-        
+
         // EU has 1 padding byte after scope
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let effect_param_id = cursor.read_u16_be()?;
         let effect_base = cursor.read_u16_be()?;
         let element_id = cursor.read_i8()?;
@@ -100,11 +100,11 @@ impl EnemySuperMove {
         let state_resistance_id = cursor.read_i8()?;
         let state_id = cursor.read_i8()?;
         let state_miss = cursor.read_i8()?;
-        
+
         // 2 padding bytes at end
         let _pad = cursor.read_u8()?;
         let _pad = cursor.read_u8()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -126,10 +126,10 @@ impl EnemySuperMove {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::ENEMY_SUPER_MOVE_GC;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -137,7 +137,7 @@ impl EnemySuperMove {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -171,11 +171,17 @@ impl EnemySuperMove {
     /// Write a single enemy super move to binary data.
     pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
         writer.write_string_fixed(&self.name, 17)?;
-        if version.region != Region::Eu { for _ in 0..4 { writer.write_u8(0)?; } }
+        if version.region != Region::Eu {
+            for _ in 0..4 {
+                writer.write_u8(0)?;
+            }
+        }
         writer.write_i8(self.category_id)?;
         writer.write_i8(self.effect_id)?;
         writer.write_u8(self.scope_id)?;
-        if version.region == Region::Eu { writer.write_u8(0)?; }
+        if version.region == Region::Eu {
+            writer.write_u8(0)?;
+        }
         writer.write_u16_be(self.effect_param_id)?;
         writer.write_u16_be(self.effect_base)?;
         writer.write_i8(self.element_id)?;
@@ -184,7 +190,8 @@ impl EnemySuperMove {
         writer.write_i8(self.state_resistance_id)?;
         writer.write_i8(self.state_id)?;
         writer.write_i8(self.state_miss)?;
-        writer.write_u8(0)?; writer.write_u8(0)?;
+        writer.write_u8(0)?;
+        writer.write_u8(0)?;
         Ok(())
     }
 
@@ -203,4 +210,3 @@ mod tests {
         assert_eq!(EnemySuperMove::ENTRY_SIZE_US_JP, 36);
     }
 }
-

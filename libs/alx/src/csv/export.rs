@@ -3,16 +3,14 @@
 use std::io::Write;
 
 use crate::entries::{
-    Accessory, Armor, Weapon, WeaponEffect, CharacterSuperMove, TRAIT_NAMES,
-    UsableItem, SpecialItem, Character, CharacterMagic,
-    Shop, TreasureChest, CrewMember, PlayableShip,
-    ShipCannon, ShipAccessory, ShipItem, EnemyShip,
-    EnemyMagic, EnemySuperMove, Swashbuckler, SpiritCurve, ExpBoost,
-    ExpCurve, MagicExpCurve, Enemy, EnemyTask,
+    Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy, EnemyMagic,
+    EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve, MagicExpCurve, PlayableShip,
+    ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem, SpiritCurve, Swashbuckler,
+    TreasureChest, UsableItem, Weapon, WeaponEffect, TRAIT_NAMES,
 };
-use crate::lookups::{ELEMENT_NAMES, EFFECT_NAMES, SCOPE_NAMES, STATE_NAMES, SHIP_OCCASION_NAMES};
-use crate::items::ItemDatabase;
 use crate::error::Result;
+use crate::items::ItemDatabase;
+use crate::lookups::{EFFECT_NAMES, ELEMENT_NAMES, SCOPE_NAMES, SHIP_OCCASION_NAMES, STATE_NAMES};
 
 /// CSV exporter for game data.
 pub struct CsvExporter;
@@ -21,31 +19,54 @@ impl CsvExporter {
     /// Export accessories to CSV format matching original ALX output.
     pub fn export_accessories<W: Write>(accessories: &[Accessory], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Write header matching original ALX format
         wtr.write_record(&[
             "Entry ID",
             "Entry US Name",
             "PC Flags",
-            "[V]", "[A]", "[F]", "[D]", "[E]", "[G]",
+            "[V]",
+            "[A]",
+            "[F]",
+            "[D]",
+            "[E]",
+            "[G]",
             "Sell%",
             "US Order 1",
             "US Order 2",
             "Pad 1",
             "Buy",
-            "Trait 1 ID", "[Trait 1 Name]", "Pad 2", "Trait 1 Value",
-            "Trait 2 ID", "[Trait 2 Name]", "Pad 3", "Trait 2 Value",
-            "Trait 3 ID", "[Trait 3 Name]", "Pad 4", "Trait 3 Value",
-            "Trait 4 ID", "[Trait 4 Name]", "Pad 5", "Trait 4 Value",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Trait 1 ID",
+            "[Trait 1 Name]",
+            "Pad 2",
+            "Trait 1 Value",
+            "Trait 2 ID",
+            "[Trait 2 Name]",
+            "Pad 3",
+            "Trait 2 Value",
+            "Trait 3 ID",
+            "[Trait 3 Name]",
+            "Pad 4",
+            "Trait 3 Value",
+            "Trait 4 ID",
+            "[Trait 4 Name]",
+            "Pad 5",
+            "Trait 4 Value",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for acc in accessories {
             let char_cols = acc.character_flags.as_columns();
             let trait_name = |id: i8| -> &str {
-                if id < 0 { "None" } else { TRAIT_NAMES.get(id as usize).unwrap_or(&"Unknown") }
+                if id < 0 {
+                    "None"
+                } else {
+                    TRAIT_NAMES.get(id as usize).unwrap_or(&"Unknown")
+                }
             };
-            
+
             wtr.write_record(&[
                 acc.id.to_string(),
                 acc.name.clone(),
@@ -82,7 +103,7 @@ impl CsvExporter {
                 acc.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -90,30 +111,53 @@ impl CsvExporter {
     /// Export armors to CSV format.
     pub fn export_armors<W: Write>(armors: &[Armor], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
             "Entry ID",
             "Entry US Name",
             "PC Flags",
-            "[V]", "[A]", "[F]", "[D]", "[E]", "[G]",
+            "[V]",
+            "[A]",
+            "[F]",
+            "[D]",
+            "[E]",
+            "[G]",
             "Sell%",
             "US Order 1",
             "US Order 2",
             "Pad 1",
             "Buy",
-            "Trait 1 ID", "[Trait 1 Name]", "Pad 2", "Trait 1 Value",
-            "Trait 2 ID", "[Trait 2 Name]", "Pad 3", "Trait 2 Value",
-            "Trait 3 ID", "[Trait 3 Name]", "Pad 4", "Trait 3 Value",
-            "Trait 4 ID", "[Trait 4 Name]", "Pad 5", "Trait 4 Value",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Trait 1 ID",
+            "[Trait 1 Name]",
+            "Pad 2",
+            "Trait 1 Value",
+            "Trait 2 ID",
+            "[Trait 2 Name]",
+            "Pad 3",
+            "Trait 2 Value",
+            "Trait 3 ID",
+            "[Trait 3 Name]",
+            "Pad 4",
+            "Trait 3 Value",
+            "Trait 4 ID",
+            "[Trait 4 Name]",
+            "Pad 5",
+            "Trait 4 Value",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for armor in armors {
             let char_cols = armor.character_flags.as_columns();
             let trait_name = |id: i8| -> &str {
-                if id < 0 { "None" } else { TRAIT_NAMES.get(id as usize).unwrap_or(&"Unknown") }
+                if id < 0 {
+                    "None"
+                } else {
+                    TRAIT_NAMES.get(id as usize).unwrap_or(&"Unknown")
+                }
             };
-            
+
             wtr.write_record(&[
                 armor.id.to_string(),
                 armor.name.clone(),
@@ -150,21 +194,21 @@ impl CsvExporter {
                 armor.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
 
     /// Export weapons to CSV format.
-    /// 
+    ///
     /// The `weapon_effects` are used to look up effect descriptions.
     pub fn export_weapons<W: Write>(
-        weapons: &[Weapon], 
+        weapons: &[Weapon],
         writer: W,
         weapon_effects: &[WeaponEffect],
     ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Weapons have a different structure than armor/accessories
         wtr.write_record(&[
             "Entry ID",
@@ -187,23 +231,26 @@ impl CsvExporter {
             "[US Descr Size]",
             "US Descr Str",
         ])?;
-        
+
         for weapon in weapons {
-            let trait_name_str = if weapon.trait_data.id < 0 { 
-                "None" 
-            } else { 
-                TRAIT_NAMES.get(weapon.trait_data.id as usize).unwrap_or(&"Unknown") 
+            let trait_name_str = if weapon.trait_data.id < 0 {
+                "None"
+            } else {
+                TRAIT_NAMES
+                    .get(weapon.trait_data.id as usize)
+                    .unwrap_or(&"Unknown")
             };
-            
+
             // Look up effect name from weapon effects
             let effect_name = if weapon.effect_id < 0 {
                 "None".to_string()
             } else {
-                weapon_effects.get(weapon.effect_id as usize)
+                weapon_effects
+                    .get(weapon.effect_id as usize)
                     .map(|e| e.description())
                     .unwrap_or_else(|| "???".to_string())
             };
-            
+
             wtr.write_record(&[
                 weapon.id.to_string(),
                 weapon.name.clone(),
@@ -226,44 +273,65 @@ impl CsvExporter {
                 weapon.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
 
     /// Export character super moves (S-Moves) to CSV format matching original ALX output.
-    pub fn export_character_super_moves<W: Write>(super_moves: &[CharacterSuperMove], writer: W) -> Result<()> {
+    pub fn export_character_super_moves<W: Write>(
+        super_moves: &[CharacterSuperMove],
+        writer: W,
+    ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Write header matching original ALX format
         wtr.write_record(&[
             "Entry ID",
             "Entry US Name",
-            "Element ID", "[Element Name]",
+            "Element ID",
+            "[Element Name]",
             "Order",
-            "Occasion Flags", "[M]", "[B]", "[S]",
-            "Effect ID", "[Effect Name]",
-            "Scope ID", "[Scope Name]",
-            "Category ID", "[Category Name]",
+            "Occasion Flags",
+            "[M]",
+            "[B]",
+            "[S]",
+            "Effect ID",
+            "[Effect Name]",
+            "Scope ID",
+            "[Scope Name]",
+            "Category ID",
+            "[Category Name]",
             "Effect Speed",
             "Effect SP",
-            "Pad 1", "Pad 2",
+            "Pad 1",
+            "Pad 2",
             "Effect Base",
-            "Type ID", "[Type Name]",
-            "State ID", "[State Name]",
+            "Type ID",
+            "[Type Name]",
+            "State ID",
+            "[State Name]",
             "State Miss%",
-            "Pad 3", "Pad 4", "Pad 5",
-            "Ship Occ ID", "[Ship Occ Name]",
+            "Pad 3",
+            "Pad 4",
+            "Pad 5",
+            "Ship Occ ID",
+            "[Ship Occ Name]",
             "Pad 6",
-            "Ship Eff ID", "[Ship Eff Name]",
+            "Ship Eff ID",
+            "[Ship Eff Name]",
             "Ship Eff SP",
             "Ship Eff Turns",
             "Ship Eff Base",
             "Unk",
-            "Pad 7", "Pad 8", "Pad 9",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Pad 7",
+            "Pad 8",
+            "Pad 9",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for sm in super_moves {
             let element_str = ELEMENT_NAMES.get(sm.element_id);
             let effect_str = EFFECT_NAMES.get(sm.effect_id as i16);
@@ -273,12 +341,24 @@ impl CsvExporter {
             let state_str = STATE_NAMES.get(sm.state_id);
             let ship_occ_str = SHIP_OCCASION_NAMES.get(sm.ship_occasion_id);
             let ship_eff_str = EFFECT_NAMES.get(sm.ship_effect_id);
-            
+
             // Occasion flags: M=4, B=2, S=1
-            let m_flag = if sm.occasion_flags & 0x04 != 0 { "X" } else { "" };
-            let b_flag = if sm.occasion_flags & 0x02 != 0 { "X" } else { "" };
-            let s_flag = if sm.occasion_flags & 0x01 != 0 { "X" } else { "" };
-            
+            let m_flag = if sm.occasion_flags & 0x04 != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let b_flag = if sm.occasion_flags & 0x02 != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let s_flag = if sm.occasion_flags & 0x01 != 0 {
+                "X"
+            } else {
+                ""
+            };
+
             wtr.write_record(&[
                 sm.id.to_string(),
                 sm.name.clone(),
@@ -325,7 +405,7 @@ impl CsvExporter {
                 sm.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -333,31 +413,63 @@ impl CsvExporter {
     /// Export usable items to CSV format.
     pub fn export_usable_items<W: Write>(items: &[UsableItem], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Occasion Flags", "[M]", "[B]", "[S]",
-            "Effect ID", "[Effect Name]",
-            "Scope ID", "[Scope Name]",
-            "Element ID", "[Element Name]",
-            "Sell%", "US Order 1", "US Order 2", "Pad 1",
-            "Buy", "Effect Base",
-            "Type ID", "[Type Name]",
-            "State ID", "[State Name]", "State Miss%",
-            "Pad 2", "Pad 3", "Pad 4",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Entry ID",
+            "Entry US Name",
+            "Occasion Flags",
+            "[M]",
+            "[B]",
+            "[S]",
+            "Effect ID",
+            "[Effect Name]",
+            "Scope ID",
+            "[Scope Name]",
+            "Element ID",
+            "[Element Name]",
+            "Sell%",
+            "US Order 1",
+            "US Order 2",
+            "Pad 1",
+            "Buy",
+            "Effect Base",
+            "Type ID",
+            "[Type Name]",
+            "State ID",
+            "[State Name]",
+            "State Miss%",
+            "Pad 2",
+            "Pad 3",
+            "Pad 4",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for item in items {
-            let m = if item.occasion_flags.can_use_menu() { "X" } else { "" };
-            let b = if item.occasion_flags.can_use_battle() { "X" } else { "" };
-            let s = if item.occasion_flags.can_use_ship() { "X" } else { "" };
-            
+            let m = if item.occasion_flags.can_use_menu() {
+                "X"
+            } else {
+                ""
+            };
+            let b = if item.occasion_flags.can_use_battle() {
+                "X"
+            } else {
+                ""
+            };
+            let s = if item.occasion_flags.can_use_ship() {
+                "X"
+            } else {
+                ""
+            };
+
             wtr.write_record(&[
                 item.id.to_string(),
                 item.name.clone(),
                 item.occasion_flags.as_binary_string(),
-                m.to_string(), b.to_string(), s.to_string(),
+                m.to_string(),
+                b.to_string(),
+                s.to_string(),
                 item.effect_id.to_string(),
                 EFFECT_NAMES.get(item.effect_id as i16).to_string(),
                 item.scope_id.to_string(),
@@ -375,13 +487,15 @@ impl CsvExporter {
                 item.state_id.to_string(),
                 STATE_NAMES.get(item.state_id as i8).to_string(),
                 item.state_miss.to_string(),
-                "0".to_string(), "0".to_string(), "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
                 format!("0x{:x}", item.description_pos),
                 item.description_size.to_string(),
                 item.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -389,14 +503,21 @@ impl CsvExporter {
     /// Export special items to CSV format.
     pub fn export_special_items<W: Write>(items: &[SpecialItem], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Sell%", "US Order 1", "US Order 2",
-            "Pad 1", "Pad 2", "Pad 3",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Entry ID",
+            "Entry US Name",
+            "Sell%",
+            "US Order 1",
+            "US Order 2",
+            "Pad 1",
+            "Pad 2",
+            "Pad 3",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for item in items {
             wtr.write_record(&[
                 item.id.to_string(),
@@ -404,13 +525,15 @@ impl CsvExporter {
                 item.sell_percent.to_string(),
                 item.order1.to_string(),
                 item.order2.to_string(),
-                "0".to_string(), "0".to_string(), "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
+                "0".to_string(),
                 format!("0x{:x}", item.description_pos),
                 item.description_size.to_string(),
                 item.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -418,43 +541,153 @@ impl CsvExporter {
     /// Export characters to CSV format matching reference ALX format.
     pub fn export_characters<W: Write>(characters: &[Character], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Header matching reference ALX format (76 columns)
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Age", "Gender ID", "[Gender Name]",
-            "Width", "Depth", "MAXMP", "Element ID", "[Element Name]", "Pad 1",
-            "Weapon ID", "[Weapon Name]", "Armor ID", "[Armor Name]", "Accessory ID", "[Accessory Name]",
+            "Entry ID",
+            "Entry US Name",
+            "Age",
+            "Gender ID",
+            "[Gender Name]",
+            "Width",
+            "Depth",
+            "MAXMP",
+            "Element ID",
+            "[Element Name]",
+            "Pad 1",
+            "Weapon ID",
+            "[Weapon Name]",
+            "Armor ID",
+            "[Armor Name]",
+            "Accessory ID",
+            "[Accessory Name]",
             "Movement Flags",
-            "[May Dodge]", "[Unk Damage]", "[Unk Ranged]", "[Unk Melee]",
-            "[Ranged Atk]", "[Melee Atk]", "[Ranged Only]", "[Take Cover]",
-            "[In Air]", "[On Ground]", "[Reserved]", "[May Move]",
-            "HP", "MAXHP", "MAXHP Growth", "SP", "MAXSP", "Counter%", "Pad 2",
-            "EXP", "MAXMP Growth", "Unk 1",
-            "Green", "Red", "Purple", "Blue", "Yellow", "Silver",
-            "Poison", "Unconscious", "Stone", "Sleep", "Confusion",
-            "Silence", "Fatigue", "Revival", "Weak",
-            "State 10", "State 11", "State 12", "State 13", "State 14", "State 15",
-            "Danger", "Power", "Will", "Vigor", "Agile", "Quick", "Pad 3",
-            "Power Growth", "Will Growth", "Vigor Growth", "Agile Growth", "Quick Growth",
-            "Green EXP", "Red EXP", "Purple EXP", "Blue EXP", "Yellow EXP", "Silver EXP",
+            "[May Dodge]",
+            "[Unk Damage]",
+            "[Unk Ranged]",
+            "[Unk Melee]",
+            "[Ranged Atk]",
+            "[Melee Atk]",
+            "[Ranged Only]",
+            "[Take Cover]",
+            "[In Air]",
+            "[On Ground]",
+            "[Reserved]",
+            "[May Move]",
+            "HP",
+            "MAXHP",
+            "MAXHP Growth",
+            "SP",
+            "MAXSP",
+            "Counter%",
+            "Pad 2",
+            "EXP",
+            "MAXMP Growth",
+            "Unk 1",
+            "Green",
+            "Red",
+            "Purple",
+            "Blue",
+            "Yellow",
+            "Silver",
+            "Poison",
+            "Unconscious",
+            "Stone",
+            "Sleep",
+            "Confusion",
+            "Silence",
+            "Fatigue",
+            "Revival",
+            "Weak",
+            "State 10",
+            "State 11",
+            "State 12",
+            "State 13",
+            "State 14",
+            "State 15",
+            "Danger",
+            "Power",
+            "Will",
+            "Vigor",
+            "Agile",
+            "Quick",
+            "Pad 3",
+            "Power Growth",
+            "Will Growth",
+            "Vigor Growth",
+            "Agile Growth",
+            "Quick Growth",
+            "Green EXP",
+            "Red EXP",
+            "Purple EXP",
+            "Blue EXP",
+            "Yellow EXP",
+            "Silver EXP",
         ])?;
-        
+
         for c in characters {
             // Movement flags columns
-            let may_dodge = if (c.movement_flags & 0x800) != 0 { "X" } else { "" };
-            let unk_damage = if (c.movement_flags & 0x400) != 0 { "X" } else { "" };
-            let unk_ranged = if (c.movement_flags & 0x200) != 0 { "X" } else { "" };
-            let unk_melee = if (c.movement_flags & 0x100) != 0 { "X" } else { "" };
-            let ranged_atk = if (c.movement_flags & 0x080) != 0 { "X" } else { "" };
-            let melee_atk = if (c.movement_flags & 0x040) != 0 { "X" } else { "" };
-            let ranged_only = if (c.movement_flags & 0x020) != 0 { "X" } else { "" };
-            let take_cover = if (c.movement_flags & 0x010) != 0 { "X" } else { "" };
-            let in_air = if (c.movement_flags & 0x008) != 0 { "X" } else { "" };
-            let on_ground = if (c.movement_flags & 0x004) != 0 { "X" } else { "" };
-            let reserved = if (c.movement_flags & 0x002) != 0 { "X" } else { "" };
-            let may_move = if (c.movement_flags & 0x001) != 0 { "X" } else { "" };
-            
+            let may_dodge = if (c.movement_flags & 0x800) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let unk_damage = if (c.movement_flags & 0x400) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let unk_ranged = if (c.movement_flags & 0x200) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let unk_melee = if (c.movement_flags & 0x100) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let ranged_atk = if (c.movement_flags & 0x080) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let melee_atk = if (c.movement_flags & 0x040) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let ranged_only = if (c.movement_flags & 0x020) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let take_cover = if (c.movement_flags & 0x010) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let in_air = if (c.movement_flags & 0x008) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let on_ground = if (c.movement_flags & 0x004) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let reserved = if (c.movement_flags & 0x002) != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let may_move = if (c.movement_flags & 0x001) != 0 {
+                "X"
+            } else {
+                ""
+            };
+
             wtr.write_record(&[
                 c.id.to_string(),
                 c.name.clone(),
@@ -466,13 +699,13 @@ impl CsvExporter {
                 c.max_mp.to_string(),
                 c.element_id.to_string(),
                 c.element_name().to_string(),
-                "0".to_string(),  // Pad 1
+                "0".to_string(), // Pad 1
                 c.weapon_id.to_string(),
-                "".to_string(),  // [Weapon Name] - would need item database
+                "".to_string(), // [Weapon Name] - would need item database
                 c.armor_id.to_string(),
-                "".to_string(),  // [Armor Name]
+                "".to_string(), // [Armor Name]
                 c.accessory_id.to_string(),
-                "".to_string(),  // [Accessory Name]
+                "".to_string(), // [Accessory Name]
                 format!("0b{:012b}", c.movement_flags),
                 may_dodge.to_string(),
                 unk_damage.to_string(),
@@ -492,7 +725,7 @@ impl CsvExporter {
                 c.sp.to_string(),
                 c.max_sp.to_string(),
                 c.counter_percent.to_string(),
-                "0".to_string(),  // Pad 2
+                "0".to_string(), // Pad 2
                 c.exp.to_string(),
                 format!("{:.2}", c.max_mp_growth),
                 format!("{:.1}", c.unknown1),
@@ -525,7 +758,7 @@ impl CsvExporter {
                 c.vigor.to_string(),
                 c.agile.to_string(),
                 c.quick.to_string(),
-                "0".to_string(),  // Pad 3
+                "0".to_string(), // Pad 3
                 format!("{:.2}", c.power_growth),
                 format!("{:.2}", c.will_growth),
                 format!("{:.2}", c.vigor_growth),
@@ -539,7 +772,7 @@ impl CsvExporter {
                 c.magic_exp[5].to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -547,40 +780,77 @@ impl CsvExporter {
     /// Export character magic to CSV format.
     pub fn export_character_magic<W: Write>(magic: &[CharacterMagic], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Element ID", "[Element Name]",
+            "Entry ID",
+            "Entry US Name",
+            "Element ID",
+            "[Element Name]",
             "Order",
-            "Occasion Flags", "[M]", "[B]", "[S]",
-            "Effect ID", "[Effect Name]",
-            "Scope ID", "[Scope Name]",
-            "Category ID", "[Category Name]",
-            "Effect Speed", "Effect SP",
-            "Pad 1", "Pad 2",
+            "Occasion Flags",
+            "[M]",
+            "[B]",
+            "[S]",
+            "Effect ID",
+            "[Effect Name]",
+            "Scope ID",
+            "[Scope Name]",
+            "Category ID",
+            "[Category Name]",
+            "Effect Speed",
+            "Effect SP",
+            "Pad 1",
+            "Pad 2",
             "Effect Base",
-            "Type ID", "[Type Name]",
-            "State ID", "[State Name]", "State Miss%",
-            "Pad 3", "Pad 4", "Pad 5",
-            "Ship Occ ID", "[Ship Occ Name]",
+            "Type ID",
+            "[Type Name]",
+            "State ID",
+            "[State Name]",
+            "State Miss%",
+            "Pad 3",
+            "Pad 4",
+            "Pad 5",
+            "Ship Occ ID",
+            "[Ship Occ Name]",
             "Pad 6",
-            "Ship Eff ID", "[Ship Eff Name]",
-            "Ship Eff SP", "Ship Eff Turns", "Ship Eff Base",
+            "Ship Eff ID",
+            "[Ship Eff Name]",
+            "Ship Eff SP",
+            "Ship Eff Turns",
+            "Ship Eff Base",
             "Unk",
-            "Pad 7", "Pad 8", "Pad 9",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
-            "[Ship US Descr Pos]", "[Ship US Descr Size]", "Ship US Descr Str",
+            "Pad 7",
+            "Pad 8",
+            "Pad 9",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
+            "[Ship US Descr Pos]",
+            "[Ship US Descr Size]",
+            "Ship US Descr Str",
         ])?;
-        
+
         for m in magic {
             // Decode occasion flags: M=4, B=2, S=1 (matching Ruby ALX)
-            let menu = if m.occasion_flags & 0x04 != 0 { "X" } else { "" };
-            let battle = if m.occasion_flags & 0x02 != 0 { "X" } else { "" };
-            let ship = if m.occasion_flags & 0x01 != 0 { "X" } else { "" };
-            
+            let menu = if m.occasion_flags & 0x04 != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let battle = if m.occasion_flags & 0x02 != 0 {
+                "X"
+            } else {
+                ""
+            };
+            let ship = if m.occasion_flags & 0x01 != 0 {
+                "X"
+            } else {
+                ""
+            };
+
             let ship_occ_name = SHIP_OCCASION_NAMES.get(m.ship_occasion_id);
             let ship_eff_name = EFFECT_NAMES.get(m.ship_effect_id);
-            
+
             wtr.write_record(&[
                 m.id.to_string(),
                 m.name.clone(),
@@ -630,17 +900,17 @@ impl CsvExporter {
                 m.ship_description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
 
     /// Export shops to CSV format matching original ALX output.
-    /// 
+    ///
     /// The `item_db` is used to look up item names for each shop slot.
     pub fn export_shops<W: Write>(shops: &[Shop], writer: W, item_db: &ItemDatabase) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Build header: Entry ID, Pad 1, US SOT Pos, [US Descr Pos], [US Descr Size], US Descr Str, Item 1 ID, [Item 1 Name], ...
         let mut header = vec![
             "Entry ID".to_string(),
@@ -654,9 +924,9 @@ impl CsvExporter {
             header.push(format!("Item {} ID", i));
             header.push(format!("[Item {} Name]", i));
         }
-        
+
         wtr.write_record(&header)?;
-        
+
         for shop in shops {
             let mut row = vec![
                 shop.id.to_string(),
@@ -666,35 +936,33 @@ impl CsvExporter {
                 shop.description_size.to_string(),
                 shop.description.clone(),
             ];
-            
+
             // Add 48 item slots with names
             for i in 0..48 {
                 let item_id = shop.item_ids.get(i).copied().unwrap_or(-1);
                 row.push(item_id.to_string());
                 row.push(item_db.name_or_default(item_id as i32));
             }
-            
+
             wtr.write_record(&row)?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
 
     /// Export treasure chests to CSV format.
-    /// 
+    ///
     /// The `item_db` is used to look up item names.
     pub fn export_treasure_chests<W: Write>(
-        chests: &[TreasureChest], 
+        chests: &[TreasureChest],
         writer: W,
         item_db: &ItemDatabase,
     ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
-        wtr.write_record(&[
-            "Entry ID", "Item ID", "[Item Name]", "Amount",
-        ])?;
-        
+
+        wtr.write_record(&["Entry ID", "Item ID", "[Item Name]", "Amount"])?;
+
         for chest in chests {
             let item_name = item_db.name_or_default(chest.item_id);
             wtr.write_record(&[
@@ -704,7 +972,7 @@ impl CsvExporter {
                 chest.item_amount.to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -712,19 +980,28 @@ impl CsvExporter {
     /// Export crew members to CSV format.
     pub fn export_crew_members<W: Write>(crew: &[CrewMember], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Position ID", "[Position Name]",
-            "Trait ID", "[Trait Name]", "Trait Value",
-            "Ship Eff ID", "Ship Eff SP", "Ship Eff Turns", "Ship Eff Base",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Entry ID",
+            "Entry US Name",
+            "Position ID",
+            "[Position Name]",
+            "Trait ID",
+            "[Trait Name]",
+            "Trait Value",
+            "Ship Eff ID",
+            "Ship Eff SP",
+            "Ship Eff Turns",
+            "Ship Eff Base",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for c in crew {
             // Use ship trait names for crew members
             let trait_name = crate::lookups::ship_trait_name(c.trait_id);
-            
+
             wtr.write_record(&[
                 c.id.to_string(),
                 c.name.clone(),
@@ -742,7 +1019,7 @@ impl CsvExporter {
                 c.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -750,15 +1027,33 @@ impl CsvExporter {
     /// Export playable ships to CSV format.
     pub fn export_playable_ships<W: Write>(ships: &[PlayableShip], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "MAXHP", "MAXSP", "SP", "Defense", "MagDef", "Quick", "Dodge%",
-            "Green", "Red", "Purple", "Blue", "Yellow", "Silver",
-            "Cannon 1", "Cannon 2", "Cannon 3", "Cannon 4", "Cannon 5",
-            "Accessory 1", "Accessory 2", "Accessory 3",
+            "Entry ID",
+            "Entry US Name",
+            "MAXHP",
+            "MAXSP",
+            "SP",
+            "Defense",
+            "MagDef",
+            "Quick",
+            "Dodge%",
+            "Green",
+            "Red",
+            "Purple",
+            "Blue",
+            "Yellow",
+            "Silver",
+            "Cannon 1",
+            "Cannon 2",
+            "Cannon 3",
+            "Cannon 4",
+            "Cannon 5",
+            "Accessory 1",
+            "Accessory 2",
+            "Accessory 3",
         ])?;
-        
+
         for ship in ships {
             wtr.write_record(&[
                 ship.id.to_string(),
@@ -786,7 +1081,7 @@ impl CsvExporter {
                 ship.accessory_ids[2].to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -794,18 +1089,36 @@ impl CsvExporter {
     /// Export ship cannons to CSV format.
     pub fn export_ship_cannons<W: Write>(cannons: &[ShipCannon], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Ship Flags", "[LJ]", "[Del]", "[Dra]", "[Esm]", "[Gil]", "[Aik]",
-            "Type ID", "[Type Name]",
-            "Element ID", "[Element Name]",
-            "Attack", "Hit%", "Limit", "SP Cost",
-            "Trait ID", "[Trait Name]", "Trait Value",
-            "Buy", "Sell%", "US Order",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Entry ID",
+            "Entry US Name",
+            "Ship Flags",
+            "[LJ]",
+            "[Del]",
+            "[Dra]",
+            "[Esm]",
+            "[Gil]",
+            "[Aik]",
+            "Type ID",
+            "[Type Name]",
+            "Element ID",
+            "[Element Name]",
+            "Attack",
+            "Hit%",
+            "Limit",
+            "SP Cost",
+            "Trait ID",
+            "[Trait Name]",
+            "Trait Value",
+            "Buy",
+            "Sell%",
+            "US Order",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for c in cannons {
             // Ship flag bits: 0=LittleJack, 1=Delphinus, 2=Drakkar, 3=Esmeralda, 4=Gilder's, 5=Aika's
             let lj = if c.ship_flags & 0x01 != 0 { "X" } else { "" };
@@ -814,10 +1127,12 @@ impl CsvExporter {
             let esm = if c.ship_flags & 0x08 != 0 { "X" } else { "" };
             let gil = if c.ship_flags & 0x10 != 0 { "X" } else { "" };
             let aik = if c.ship_flags & 0x20 != 0 { "X" } else { "" };
-            let trait_name = if c.trait_id < 0 { "None" } else { 
+            let trait_name = if c.trait_id < 0 {
+                "None"
+            } else {
                 TRAIT_NAMES.get(c.trait_id as usize).unwrap_or(&"Unknown")
             };
-            
+
             wtr.write_record(&[
                 c.id.to_string(),
                 c.name.clone(),
@@ -847,31 +1162,51 @@ impl CsvExporter {
                 c.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
 
     /// Export ship accessories to CSV format.
-    pub fn export_ship_accessories<W: Write>(accessories: &[ShipAccessory], writer: W) -> Result<()> {
+    pub fn export_ship_accessories<W: Write>(
+        accessories: &[ShipAccessory],
+        writer: W,
+    ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Ship Flags", "[LJ]", "[Del]", "[Dra]", "[Esm]", "[Gil]", "[Aik]",
-            "Trait 1 ID", "[Trait 1 Name]", "Trait 1 Value",
-            "Trait 2 ID", "[Trait 2 Name]", "Trait 2 Value",
-            "Trait 3 ID", "[Trait 3 Name]", "Trait 3 Value",
-            "Trait 4 ID", "[Trait 4 Name]", "Trait 4 Value",
-            "Buy", "Sell%", "US Order",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Entry ID",
+            "Entry US Name",
+            "Ship Flags",
+            "[LJ]",
+            "[Del]",
+            "[Dra]",
+            "[Esm]",
+            "[Gil]",
+            "[Aik]",
+            "Trait 1 ID",
+            "[Trait 1 Name]",
+            "Trait 1 Value",
+            "Trait 2 ID",
+            "[Trait 2 Name]",
+            "Trait 2 Value",
+            "Trait 3 ID",
+            "[Trait 3 Name]",
+            "Trait 3 Value",
+            "Trait 4 ID",
+            "[Trait 4 Name]",
+            "Trait 4 Value",
+            "Buy",
+            "Sell%",
+            "US Order",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for acc in accessories {
             // Use ship trait names for ship accessories
-            let ship_trait = |id: i8| -> &str {
-                crate::lookups::ship_trait_name(id)
-            };
+            let ship_trait = |id: i8| -> &str { crate::lookups::ship_trait_name(id) };
             // Ship flag bits: 0=LittleJack, 1=Delphinus, 2=Drakkar, 3=Esmeralda, 4=Gilder's, 5=Aika's
             let lj = if acc.ship_flags & 0x01 != 0 { "X" } else { "" };
             let del = if acc.ship_flags & 0x02 != 0 { "X" } else { "" };
@@ -879,7 +1214,7 @@ impl CsvExporter {
             let esm = if acc.ship_flags & 0x08 != 0 { "X" } else { "" };
             let gil = if acc.ship_flags & 0x10 != 0 { "X" } else { "" };
             let aik = if acc.ship_flags & 0x20 != 0 { "X" } else { "" };
-            
+
             wtr.write_record(&[
                 acc.id.to_string(),
                 acc.name.clone(),
@@ -910,7 +1245,7 @@ impl CsvExporter {
                 acc.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -918,27 +1253,44 @@ impl CsvExporter {
     /// Export ship items to CSV format.
     pub fn export_ship_items<W: Write>(items: &[ShipItem], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Occasion Flags", "[M]", "[B]", "[S]",
-            "Ship Eff ID", "Ship Eff Turns", "Consume%",
-            "Buy", "Sell%", "US Order 1", "US Order 2",
-            "Ship Eff Base", "Element ID", "[Element Name]",
-            "Unk 1", "Unk 2", "Hit%",
-            "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "Entry ID",
+            "Entry US Name",
+            "Occasion Flags",
+            "[M]",
+            "[B]",
+            "[S]",
+            "Ship Eff ID",
+            "Ship Eff Turns",
+            "Consume%",
+            "Buy",
+            "Sell%",
+            "US Order 1",
+            "US Order 2",
+            "Ship Eff Base",
+            "Element ID",
+            "[Element Name]",
+            "Unk 1",
+            "Unk 2",
+            "Hit%",
+            "[US Descr Pos]",
+            "[US Descr Size]",
+            "US Descr Str",
         ])?;
-        
+
         for item in items {
             let m = if item.usable_in_menu() { "X" } else { "" };
             let b = if item.usable_in_battle() { "X" } else { "" };
             let s = if item.usable_on_ship() { "X" } else { "" };
-            
+
             wtr.write_record(&[
                 item.id.to_string(),
                 item.name.clone(),
                 format!("0b{:04b}", item.occasion_flags),
-                m.to_string(), b.to_string(), s.to_string(),
+                m.to_string(),
+                b.to_string(),
+                s.to_string(),
                 item.ship_effect_id.to_string(),
                 item.ship_effect_turns.to_string(),
                 item.consume.to_string(),
@@ -957,7 +1309,7 @@ impl CsvExporter {
                 item.description.clone(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -965,11 +1317,23 @@ impl CsvExporter {
     /// Export enemy ships to CSV format.
     pub fn export_enemy_ships<W: Write>(ships: &[EnemyShip], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         let mut header = vec![
-            "Entry ID", "Entry US Name",
-            "MAXHP", "Will", "Defense", "MagDef", "Quick", "Agile", "Dodge%",
-            "Green", "Red", "Purple", "Blue", "Yellow", "Silver",
+            "Entry ID",
+            "Entry US Name",
+            "MAXHP",
+            "Will",
+            "Defense",
+            "MagDef",
+            "Quick",
+            "Agile",
+            "Dodge%",
+            "Green",
+            "Red",
+            "Purple",
+            "Blue",
+            "Yellow",
+            "Silver",
         ];
         for i in 1..=4 {
             header.push(Box::leak(format!("Arm {} Type ID", i).into_boxed_str()));
@@ -984,9 +1348,9 @@ impl CsvExporter {
             header.push(Box::leak(format!("Item Drop {} ID", i).into_boxed_str()));
             header.push(Box::leak(format!("Item {} ID", i).into_boxed_str()));
         }
-        
+
         wtr.write_record(&header)?;
-        
+
         for ship in ships {
             let mut row = vec![
                 ship.id.to_string(),
@@ -1020,7 +1384,7 @@ impl CsvExporter {
             }
             wtr.write_record(&row)?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1028,17 +1392,27 @@ impl CsvExporter {
     /// Export enemy magic to CSV format.
     pub fn export_enemy_magic<W: Write>(magic: &[EnemyMagic], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Category ID", "Effect ID", "[Effect Name]",
-            "Scope ID", "[Scope Name]",
-            "Effect Param ID", "Effect Base",
-            "Element ID", "[Element Name]",
-            "Type ID", "State Inflict ID", "State Resist ID",
-            "State ID", "[State Name]", "State Miss%",
+            "Entry ID",
+            "Entry US Name",
+            "Category ID",
+            "Effect ID",
+            "[Effect Name]",
+            "Scope ID",
+            "[Scope Name]",
+            "Effect Param ID",
+            "Effect Base",
+            "Element ID",
+            "[Element Name]",
+            "Type ID",
+            "State Inflict ID",
+            "State Resist ID",
+            "State ID",
+            "[State Name]",
+            "State Miss%",
         ])?;
-        
+
         for m in magic {
             wtr.write_record(&[
                 m.id.to_string(),
@@ -1060,7 +1434,7 @@ impl CsvExporter {
                 m.state_miss.to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1068,18 +1442,28 @@ impl CsvExporter {
     /// Export enemy super moves to CSV format.
     pub fn export_enemy_super_moves<W: Write>(moves: &[EnemySuperMove], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Category ID", "[Category Name]",
-            "Effect ID", "[Effect Name]",
-            "Scope ID", "[Scope Name]",
-            "Effect Param ID", "Effect Base",
-            "Element ID", "[Element Name]",
-            "Type ID", "State Inflict ID", "State Resist ID",
-            "State ID", "[State Name]", "State Miss%",
+            "Entry ID",
+            "Entry US Name",
+            "Category ID",
+            "[Category Name]",
+            "Effect ID",
+            "[Effect Name]",
+            "Scope ID",
+            "[Scope Name]",
+            "Effect Param ID",
+            "Effect Base",
+            "Element ID",
+            "[Element Name]",
+            "Type ID",
+            "State Inflict ID",
+            "State Resist ID",
+            "State ID",
+            "[State Name]",
+            "State Miss%",
         ])?;
-        
+
         for m in moves {
             wtr.write_record(&[
                 m.id.to_string(),
@@ -1102,7 +1486,7 @@ impl CsvExporter {
                 m.state_miss.to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1110,12 +1494,17 @@ impl CsvExporter {
     /// Export swashbucklers to CSV format.
     pub fn export_swashbucklers<W: Write>(ratings: &[Swashbuckler], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "Entry US Name",
-            "Rating", "Regular Atk", "S-Move Atk", "Dodge%", "Run%",
+            "Entry ID",
+            "Entry US Name",
+            "Rating",
+            "Regular Atk",
+            "S-Move Atk",
+            "Dodge%",
+            "Run%",
         ])?;
-        
+
         for r in ratings {
             wtr.write_record(&[
                 r.id.to_string(),
@@ -1127,7 +1516,7 @@ impl CsvExporter {
                 r.run.to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1135,7 +1524,7 @@ impl CsvExporter {
     /// Export spirit curves to CSV format.
     pub fn export_spirit_curves<W: Write>(curves: &[SpiritCurve], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Build header with SP/MAXSP for each level
         let mut header = vec!["Entry ID".to_string(), "[PC Name]".to_string()];
         for i in 1..=99 {
@@ -1143,7 +1532,7 @@ impl CsvExporter {
             header.push(format!("MAXSP {}", i));
         }
         wtr.write_record(&header)?;
-        
+
         for curve in curves {
             let mut row = vec![curve.id.to_string(), curve.character_name.clone()];
             for level in &curve.levels {
@@ -1152,7 +1541,7 @@ impl CsvExporter {
             }
             wtr.write_record(&row)?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1160,12 +1549,19 @@ impl CsvExporter {
     /// Export exp boosts to CSV format.
     pub fn export_exp_boosts<W: Write>(boosts: &[ExpBoost], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Entry ID", "[PC Name]",
-            "EXP", "Green EXP", "Red EXP", "Purple EXP", "Blue EXP", "Yellow EXP", "Silver EXP",
+            "Entry ID",
+            "[PC Name]",
+            "EXP",
+            "Green EXP",
+            "Red EXP",
+            "Purple EXP",
+            "Blue EXP",
+            "Yellow EXP",
+            "Silver EXP",
         ])?;
-        
+
         for b in boosts {
             wtr.write_record(&[
                 b.id.to_string(),
@@ -1179,51 +1575,117 @@ impl CsvExporter {
                 b.silver_exp.to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
 
     /// Export enemies to CSV format matching original ALX format.
-    /// 
+    ///
     /// The `item_db` is used to look up item names for drops.
     /// The `enemy_names` map converts enemy IDs to US names.
     pub fn export_enemies<W: Write>(
-        enemies: &[Enemy], 
+        enemies: &[Enemy],
         writer: W,
         item_db: &ItemDatabase,
         enemy_names: &std::collections::HashMap<u32, String>,
     ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Header matching original ALX exactly
         wtr.write_record(&[
-            "Entry ID", "[Filter]", "Entry JP Name", "[Entry US Name]",
-            "Width", "Depth", "Element ID", "[Element Name]", "Pad 1", "Pad 2",
-            "Movement Flags", 
-            "[May Dodge]", "[Unk Damage]", "[Unk Ranged]", "[Unk Melee]",
-            "[Ranged Atk]", "[Melee Atk]", "[Ranged Only]", "[Take Cover]",
-            "[In Air]", "[On Ground]", "[Reserved]", "[May Move]",
-            "Counter%", "EXP", "Gold", "Pad 3", "Pad 4",
-            "MAXHP", "Unk 1",
-            "Green", "Red", "Purple", "Blue", "Yellow", "Silver",
-            "Poison", "Unconscious", "Stone", "Sleep", "Confusion",
-            "Silence", "Fatigue", "Revival", "Weak",
-            "State 10", "State 11", "State 12", "State 13", "State 14", "State 15",
-            "Danger", "Effect ID", "[Effect Name]",
-            "State ID", "[State Name]", "State Miss%", "Pad 5",
-            "Level", "Will", "Vigor", "Agile", "Quick",
-            "Attack", "Defense", "MagDef", "Hit%", "Dodge%", "Pad 6", "Pad 7",
-            "Item 1 Prob", "Item 1 Amount", "Item 1 ID", "[Item 1 Name]",
-            "Item 2 Prob", "Item 2 Amount", "Item 2 ID", "[Item 2 Name]",
-            "Item 3 Prob", "Item 3 Amount", "Item 3 ID", "[Item 3 Name]",
-            "Item 4 Prob", "Item 4 Amount", "Item 4 ID", "[Item 4 Name]",
+            "Entry ID",
+            "[Filter]",
+            "Entry JP Name",
+            "[Entry US Name]",
+            "Width",
+            "Depth",
+            "Element ID",
+            "[Element Name]",
+            "Pad 1",
+            "Pad 2",
+            "Movement Flags",
+            "[May Dodge]",
+            "[Unk Damage]",
+            "[Unk Ranged]",
+            "[Unk Melee]",
+            "[Ranged Atk]",
+            "[Melee Atk]",
+            "[Ranged Only]",
+            "[Take Cover]",
+            "[In Air]",
+            "[On Ground]",
+            "[Reserved]",
+            "[May Move]",
+            "Counter%",
+            "EXP",
+            "Gold",
+            "Pad 3",
+            "Pad 4",
+            "MAXHP",
+            "Unk 1",
+            "Green",
+            "Red",
+            "Purple",
+            "Blue",
+            "Yellow",
+            "Silver",
+            "Poison",
+            "Unconscious",
+            "Stone",
+            "Sleep",
+            "Confusion",
+            "Silence",
+            "Fatigue",
+            "Revival",
+            "Weak",
+            "State 10",
+            "State 11",
+            "State 12",
+            "State 13",
+            "State 14",
+            "State 15",
+            "Danger",
+            "Effect ID",
+            "[Effect Name]",
+            "State ID",
+            "[State Name]",
+            "State Miss%",
+            "Pad 5",
+            "Level",
+            "Will",
+            "Vigor",
+            "Agile",
+            "Quick",
+            "Attack",
+            "Defense",
+            "MagDef",
+            "Hit%",
+            "Dodge%",
+            "Pad 6",
+            "Pad 7",
+            "Item 1 Prob",
+            "Item 1 Amount",
+            "Item 1 ID",
+            "[Item 1 Name]",
+            "Item 2 Prob",
+            "Item 2 Amount",
+            "Item 2 ID",
+            "[Item 2 Name]",
+            "Item 3 Prob",
+            "Item 3 Amount",
+            "Item 3 ID",
+            "[Item 3 Name]",
+            "Item 4 Prob",
+            "Item 4 Amount",
+            "Item 4 ID",
+            "[Item 4 Name]",
         ])?;
-        
+
         // Process enemies: determine which entries should be marked as global ('*')
         // and sort by ID, then by file order
         let mut processed = process_enemy_filters(enemies);
-        
+
         // Sort by ID, then global first, then by file name
         processed.sort_by(|(filter_a, a), (filter_b, b)| {
             let id_cmp = a.id.cmp(&b.id);
@@ -1239,9 +1701,9 @@ impl CsvExporter {
             // Then by file name
             filter_a.cmp(filter_b)
         });
-        
+
         let sorted = processed;
-        
+
         for (filter, e) in sorted {
             // Movement flags as individual columns
             let may_dodge = if e.may_dodge() { "X" } else { "" };
@@ -1256,15 +1718,15 @@ impl CsvExporter {
             let on_ground = if e.on_ground() { "X" } else { "" };
             let reserved = if e.reserved() { "X" } else { "" };
             let may_move = if e.may_move() { "X" } else { "" };
-            
+
             // US name lookup
             let us_name = enemy_names.get(&e.id).map(|s| s.as_str()).unwrap_or("???");
-            
+
             // Item name lookups
             let item_name = |drop: &crate::entries::EnemyItemDrop| -> String {
                 item_db.name_or_default(drop.item_id as i32)
             };
-            
+
             wtr.write_record(&[
                 e.id.to_string(),
                 filter.clone(),
@@ -1355,7 +1817,7 @@ impl CsvExporter {
                 item_name(&e.item_drops[3]),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1363,12 +1825,17 @@ impl CsvExporter {
     /// Export enemy tasks to CSV format.
     pub fn export_enemy_tasks<W: Write>(tasks: &[EnemyTask], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         wtr.write_record(&[
-            "Task ID", "[Filter]", "Enemy ID",
-            "Type ID", "[Type Name]", "Task ID", "Param ID",
+            "Task ID",
+            "[Filter]",
+            "Enemy ID",
+            "Type ID",
+            "[Type Name]",
+            "Task ID",
+            "Param ID",
         ])?;
-        
+
         for t in tasks {
             wtr.write_record(&[
                 t.id.to_string(),
@@ -1380,7 +1847,7 @@ impl CsvExporter {
                 t.param_id.to_string(),
             ])?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1388,14 +1855,14 @@ impl CsvExporter {
     /// Export EXP curves to CSV format matching original ALX output.
     pub fn export_exp_curves<W: Write>(curves: &[ExpCurve], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Build header: Entry ID, [PC Name], EXP 1-99
         let mut header = vec!["Entry ID".to_string(), "[PC Name]".to_string()];
         for i in 1..=99 {
             header.push(format!("EXP {}", i));
         }
         wtr.write_record(&header)?;
-        
+
         for curve in curves {
             let mut row = vec![curve.id.to_string(), curve.character_name.clone()];
             for &exp in curve.exp_values.iter().take(99) {
@@ -1407,7 +1874,7 @@ impl CsvExporter {
             }
             wtr.write_record(&row)?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1415,7 +1882,7 @@ impl CsvExporter {
     /// Export Magic EXP curves to CSV format matching original ALX output.
     pub fn export_magic_exp_curves<W: Write>(curves: &[MagicExpCurve], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
-        
+
         // Build header: Entry ID, [PC Name], then 6 levels for each of 6 elements
         let mut header = vec!["Entry ID".to_string(), "[PC Name]".to_string()];
         let elements = ["Green", "Red", "Purple", "Blue", "Yellow", "Silver"];
@@ -1425,7 +1892,7 @@ impl CsvExporter {
             }
         }
         wtr.write_record(&header)?;
-        
+
         for curve in curves {
             let mut row = vec![curve.id.to_string(), curve.character_name.clone()];
             for &exp in &curve.green_exp {
@@ -1448,7 +1915,7 @@ impl CsvExporter {
             }
             wtr.write_record(&row)?;
         }
-        
+
         wtr.flush()?;
         Ok(())
     }
@@ -1476,10 +1943,10 @@ fn file_order(filter: &str) -> u8 {
 /// For each enemy ID, the entry with the lowest file order gets marked as global.
 fn process_enemy_filters(enemies: &[Enemy]) -> Vec<(String, &Enemy)> {
     use std::collections::HashMap;
-    
+
     // Group enemies by ID, tracking the best candidate for global status
     let mut best_per_id: HashMap<u32, (u8, usize)> = HashMap::new(); // id -> (best_order, index)
-    
+
     for (idx, enemy) in enemies.iter().enumerate() {
         let order = file_order(&enemy.filter);
         let entry = best_per_id.entry(enemy.id).or_insert((order, idx));
@@ -1487,16 +1954,18 @@ fn process_enemy_filters(enemies: &[Enemy]) -> Vec<(String, &Enemy)> {
             *entry = (order, idx);
         }
     }
-    
+
     // Determine which indices should become global
     let global_indices: std::collections::HashSet<usize> = best_per_id
         .values()
         .filter(|(order, _)| *order <= 2) // Only mark as global if order <= 2
         .map(|(_, idx)| *idx)
         .collect();
-    
+
     // Build result with updated filters
-    enemies.iter().enumerate()
+    enemies
+        .iter()
+        .enumerate()
         .map(|(idx, enemy)| {
             let filter = if global_indices.contains(&idx) {
                 "*".to_string()
@@ -1507,4 +1976,3 @@ fn process_enemy_filters(enemies: &[Enemy]) -> Vec<(String, &Enemy)> {
         })
         .collect()
 }
-

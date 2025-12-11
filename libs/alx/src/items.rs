@@ -5,8 +5,7 @@
 use std::collections::HashMap;
 
 use crate::entries::{
-    Accessory, Armor, Weapon, UsableItem, SpecialItem,
-    ShipCannon, ShipAccessory, ShipItem,
+    Accessory, Armor, ShipAccessory, ShipCannon, ShipItem, SpecialItem, UsableItem, Weapon,
 };
 
 /// Item category based on ID range.
@@ -79,7 +78,7 @@ impl ItemDatabase {
         ship_items: &[ShipItem],
     ) -> Self {
         let mut db = Self::new();
-        
+
         for item in weapons {
             db.insert(item.id as i32, &item.name);
         }
@@ -104,10 +103,10 @@ impl ItemDatabase {
         for item in ship_items {
             db.insert(item.id as i32, &item.name);
         }
-        
+
         // Add Gold entry
         db.insert(0x200, "Gold");
-        
+
         db
     }
 
@@ -138,7 +137,10 @@ impl ItemDatabase {
         } else if id >= 0x200 {
             "Gold".to_string()
         } else {
-            self.id_to_name.get(&id).cloned().unwrap_or_else(|| "???".to_string())
+            self.id_to_name
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| "???".to_string())
         }
     }
 
@@ -228,12 +230,12 @@ mod tests {
         db.insert(0, "Cutlass");
         db.insert(80, "Vyse's Uniform");
         db.insert(240, "Sacri Crystal");
-        
+
         assert_eq!(db.get_name(0), Some("Cutlass"));
         assert_eq!(db.get_id("Cutlass"), Some(0));
         assert_eq!(db.get_id("cutlass"), Some(0)); // case-insensitive
         assert_eq!(db.get_id("CUTLASS"), Some(0));
-        
+
         assert_eq!(db.name_or_default(-1), "None");
         assert_eq!(db.name_or_default(100), "???"); // Unknown item ID
         assert_eq!(db.name_or_default(512), "Gold"); // Gold IDs are 0x200+
@@ -243,15 +245,14 @@ mod tests {
     fn test_format_item() {
         let mut db = ItemDatabase::new();
         db.insert(240, "Sacri Crystal");
-        
+
         assert_eq!(format_item(-1, &db), "None");
         assert_eq!(format_item(512, &db), "Gold");
         assert_eq!(format_item(240, &db), "Sacri Crystal (ID 240)");
-        
+
         assert_eq!(format_item_with_amount(-1, 0, &db), "None");
         assert_eq!(format_item_with_amount(512, 150, &db), "150 Gold");
         assert_eq!(format_item_with_amount(240, 1, &db), "Sacri Crystal");
         assert_eq!(format_item_with_amount(240, 3, &db), "Sacri Crystal x3");
     }
 }
-

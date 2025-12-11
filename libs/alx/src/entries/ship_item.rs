@@ -1,11 +1,11 @@
 //! Ship item entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// A ship item (consumable) in the game.
@@ -52,7 +52,7 @@ pub struct ShipItem {
 impl ShipItem {
     /// Size of one entry in bytes (US/JP).
     pub const ENTRY_SIZE: usize = 36;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_OCCASION: usize = 17;
     const OFF_SHIP_EFFECT_ID: usize = 18;
@@ -83,19 +83,19 @@ impl ShipItem {
         let order1 = cursor.read_i8()?;
         let order2 = cursor.read_i8()?;
         let _pad2 = cursor.read_u8()?;
-        
+
         // EU has extra padding
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
             let _pad = cursor.read_u8()?;
         }
-        
+
         let ship_effect_base = cursor.read_i16_be()?;
         let element_id = cursor.read_i8()?;
         let unknown1 = cursor.read_i8()?;
         let unknown2 = cursor.read_i16_be()?;
         let hit = cursor.read_i16_be()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -122,10 +122,10 @@ impl ShipItem {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::SHIP_ITEM;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -133,7 +133,7 @@ impl ShipItem {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -148,12 +148,12 @@ impl ShipItem {
     pub fn usable_in_menu(&self) -> bool {
         (self.occasion_flags & 0x04) != 0
     }
-    
+
     /// Check if usable in battle
     pub fn usable_in_battle(&self) -> bool {
         (self.occasion_flags & 0x02) != 0
     }
-    
+
     /// Check if usable on ship
     pub fn usable_on_ship(&self) -> bool {
         (self.occasion_flags & 0x01) != 0
@@ -165,15 +165,17 @@ impl ShipItem {
         buf[Self::OFF_SHIP_EFFECT_ID] = self.ship_effect_id as u8;
         buf[Self::OFF_SHIP_EFFECT_TURNS] = self.ship_effect_turns as u8;
         buf[Self::OFF_CONSUME] = self.consume as u8;
-        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE + 2]
+            .copy_from_slice(&self.buy_price.to_be_bytes());
         buf[Self::OFF_SELL] = self.sell_percent as u8;
         buf[Self::OFF_ORDER1] = self.order1 as u8;
         buf[Self::OFF_ORDER2] = self.order2 as u8;
-        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE+2].copy_from_slice(&self.ship_effect_base.to_be_bytes());
+        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE + 2]
+            .copy_from_slice(&self.ship_effect_base.to_be_bytes());
         buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
         buf[Self::OFF_UNK1] = self.unknown1 as u8;
-        buf[Self::OFF_UNK2..Self::OFF_UNK2+2].copy_from_slice(&self.unknown2.to_be_bytes());
-        buf[Self::OFF_HIT..Self::OFF_HIT+2].copy_from_slice(&self.hit.to_be_bytes());
+        buf[Self::OFF_UNK2..Self::OFF_UNK2 + 2].copy_from_slice(&self.unknown2.to_be_bytes());
+        buf[Self::OFF_HIT..Self::OFF_HIT + 2].copy_from_slice(&self.hit.to_be_bytes());
     }
 
     /// Patch all ship item entries into a buffer.
@@ -199,4 +201,3 @@ mod tests {
         assert_eq!(ShipItem::ENTRY_SIZE, 36);
     }
 }
-

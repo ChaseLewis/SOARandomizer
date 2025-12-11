@@ -1,11 +1,11 @@
 //! Crew member entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// A crew member in the game.
@@ -42,7 +42,7 @@ pub struct CrewMember {
 impl CrewMember {
     /// Size of one entry in bytes (US/JP).
     pub const ENTRY_SIZE: usize = 36;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_POSITION_ID: usize = 17;
     const OFF_TRAIT_ID: usize = 18;
@@ -77,12 +77,12 @@ impl CrewMember {
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
         let name = cursor.read_string_fixed(17)?;
         let position_id = cursor.read_i8()?;
-        
+
         // EU has extra padding here
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let trait_id = cursor.read_i8()?;
         let _pad1 = cursor.read_u8()?;
         let trait_value = cursor.read_i16_be()?;
@@ -98,7 +98,7 @@ impl CrewMember {
         let _pad6 = cursor.read_u8()?;
         let _pad7 = cursor.read_u8()?;
         let _pad8 = cursor.read_u8()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -120,10 +120,10 @@ impl CrewMember {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::CREW_MEMBER;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -131,7 +131,7 @@ impl CrewMember {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -146,12 +146,14 @@ impl CrewMember {
     pub fn patch_entry(&self, buf: &mut [u8]) {
         buf[Self::OFF_POSITION_ID] = self.position_id as u8;
         buf[Self::OFF_TRAIT_ID] = self.trait_id as u8;
-        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE+2].copy_from_slice(&self.trait_value.to_be_bytes());
+        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE + 2]
+            .copy_from_slice(&self.trait_value.to_be_bytes());
         buf[Self::OFF_SHIP_EFFECT_ID] = self.ship_effect_id as u8;
         buf[Self::OFF_SHIP_EFFECT_SP] = self.ship_effect_sp as u8;
         buf[Self::OFF_SHIP_EFFECT_TURNS] = self.ship_effect_turns as u8;
-        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE+2].copy_from_slice(&self.ship_effect_base.to_be_bytes());
-        buf[Self::OFF_UNKNOWN..Self::OFF_UNKNOWN+2].copy_from_slice(&self.unknown.to_be_bytes());
+        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE + 2]
+            .copy_from_slice(&self.ship_effect_base.to_be_bytes());
+        buf[Self::OFF_UNKNOWN..Self::OFF_UNKNOWN + 2].copy_from_slice(&self.unknown.to_be_bytes());
     }
 
     /// Patch all crew member entries into a buffer.
@@ -189,7 +191,7 @@ mod tests {
             description_pos: 0,
             description_size: 0,
         };
-        
+
         assert_eq!(cm.position_name(), "Helmsman");
         cm.position_id = 1;
         assert_eq!(cm.position_name(), "Engineer");
@@ -197,4 +199,3 @@ mod tests {
         assert_eq!(cm.position_name(), "Gunner");
     }
 }
-

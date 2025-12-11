@@ -49,11 +49,11 @@ pub trait BinaryReader: Read + Seek {
     fn read_string_fixed(&mut self, len: usize) -> Result<String> {
         let mut buf = vec![0u8; len];
         self.read_exact(&mut buf)?;
-        
+
         // Find null terminator
         let end = buf.iter().position(|&b| b == 0).unwrap_or(len);
         let bytes = &buf[..end];
-        
+
         if bytes.is_empty() {
             return Ok(String::new());
         }
@@ -129,7 +129,7 @@ pub trait BinaryWriter: Write + Seek {
     fn write_string_fixed(&mut self, s: &str, len: usize) -> Result<()> {
         let (encoded, _, _) = encoding_rs::SHIFT_JIS.encode(s);
         let bytes = encoded.as_ref();
-        
+
         if bytes.len() > len {
             return Err(Error::ValidationError(format!(
                 "String too long: {} bytes, max {} bytes",
@@ -139,7 +139,7 @@ pub trait BinaryWriter: Write + Seek {
         }
 
         self.write_all(bytes)?;
-        
+
         // Pad with nulls
         let padding = len - bytes.len();
         if padding > 0 {
@@ -204,4 +204,3 @@ mod tests {
         assert_eq!(result, vec![b'H', b'i', 0, 0, 0]);
     }
 }
-

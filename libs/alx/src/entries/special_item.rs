@@ -1,11 +1,11 @@
 //! Special item entry type (key items, moon crystals, etc.)
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// Special item entry (key items, moon crystals, etc.)
@@ -50,7 +50,7 @@ impl Default for SpecialItem {
 impl SpecialItem {
     /// Size of one special item entry in bytes (JP/US).
     pub const ENTRY_SIZE: usize = 22;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_SELL: usize = 17;
     const OFF_ORDER1: usize = 18;
@@ -63,20 +63,20 @@ impl SpecialItem {
         let sell_percent = cursor.read_i8()?;
         let order1 = cursor.read_i8()?;
         let order2 = cursor.read_i8()?;
-        
+
         // EU has extra padding here
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let buy_price = cursor.read_u16_be()?;
-        
+
         // EU has extra padding at the end
         if version.region == Region::Eu {
             let _pad1 = cursor.read_u8()?;
             let _pad2 = cursor.read_u8()?;
         }
-        
+
         Ok(Self {
             id,
             name,
@@ -94,10 +94,10 @@ impl SpecialItem {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut items = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::SPECIAL_ITEM;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -105,7 +105,7 @@ impl SpecialItem {
             let item = Self::read_one(&mut cursor, id, version)?;
             items.push(item);
         }
-        
+
         Ok(items)
     }
 
@@ -121,7 +121,8 @@ impl SpecialItem {
         buf[Self::OFF_SELL] = self.sell_percent as u8;
         buf[Self::OFF_ORDER1] = self.order1 as u8;
         buf[Self::OFF_ORDER2] = self.order2 as u8;
-        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE + 2]
+            .copy_from_slice(&self.buy_price.to_be_bytes());
     }
 
     /// Patch all special item entries into a buffer.

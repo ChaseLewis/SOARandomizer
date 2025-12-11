@@ -367,7 +367,11 @@ pub fn character_flag_marker(flags: u16, character_id: u8) -> &'static str {
     // Bits are: V=5, A=4, F=3, D=2, E=1, G=0 (in the lower 6 bits)
     // The Ruby code uses (0x20 >> _id) for character index _id (0-5)
     let bit = 0x20 >> character_id;
-    if (flags & bit) != 0 { "X" } else { "" }
+    if (flags & bit) != 0 {
+        "X"
+    } else {
+        ""
+    }
 }
 
 /// Get enemy name by ID.
@@ -555,9 +559,8 @@ mod tests {
         assert_eq!(character_flag_marker(flags, 0), "X"); // Vyse
         assert_eq!(character_flag_marker(flags, 1), "X"); // Aika
         assert_eq!(character_flag_marker(flags, 2), "X"); // Fina
-        assert_eq!(character_flag_marker(flags, 3), "");  // Drachma
+        assert_eq!(character_flag_marker(flags, 3), ""); // Drachma
         assert_eq!(character_flag_marker(flags, 4), "X"); // Enrique
-        assert_eq!(character_flag_marker(flags, 5), "");  // Gilder
+        assert_eq!(character_flag_marker(flags, 5), ""); // Gilder
     }
 }
-

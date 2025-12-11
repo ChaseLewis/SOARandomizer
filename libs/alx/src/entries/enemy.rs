@@ -1,7 +1,7 @@
 //! Enemy entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
 use crate::game::region::GameVersion;
@@ -90,7 +90,12 @@ impl Enemy {
     pub const ENTRY_SIZE: usize = 136;
 
     /// Read a single enemy from binary data.
-    pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, filter: &str, _version: &GameVersion) -> Result<Self> {
+    pub fn read_one(
+        cursor: &mut Cursor<&[u8]>,
+        id: u32,
+        filter: &str,
+        _version: &GameVersion,
+    ) -> Result<Self> {
         let name_jp = cursor.read_string_fixed(21)?;
         let width = cursor.read_i8()?;
         let depth = cursor.read_i8()?;
@@ -105,17 +110,17 @@ impl Enemy {
         let _pad4 = cursor.read_i8()?;
         let max_hp = cursor.read_i32_be()?;
         let unknown_float = cursor.read_f32_be()?;
-        
+
         let mut elements = [0i16; 6];
         for i in 0..6 {
             elements[i] = cursor.read_i16_be()?;
         }
-        
+
         let mut states = [0i16; 15];
         for i in 0..15 {
             states[i] = cursor.read_i16_be()?;
         }
-        
+
         let danger = cursor.read_i16_be()?;
         let effect_id = cursor.read_i8()?;
         let state_id = cursor.read_i8()?;
@@ -133,7 +138,7 @@ impl Enemy {
         let dodge = cursor.read_i16_be()?;
         let _pad6 = cursor.read_i8()?;
         let _pad7 = cursor.read_i8()?;
-        
+
         let mut item_drops = [EnemyItemDrop::default(); 4];
         for i in 0..4 {
             item_drops[i] = EnemyItemDrop {
@@ -142,7 +147,7 @@ impl Enemy {
                 item_id: cursor.read_i16_be()?,
             };
         }
-        
+
         Ok(Self {
             id,
             filter: filter.to_string(),
@@ -193,29 +198,53 @@ impl Enemy {
     }
 
     /// Check movement flag: May Dodge
-    pub fn may_dodge(&self) -> bool { (self.movement_flags & 0x800) != 0 }
+    pub fn may_dodge(&self) -> bool {
+        (self.movement_flags & 0x800) != 0
+    }
     /// Check movement flag: Unknown Damage
-    pub fn unk_damage(&self) -> bool { (self.movement_flags & 0x400) != 0 }
+    pub fn unk_damage(&self) -> bool {
+        (self.movement_flags & 0x400) != 0
+    }
     /// Check movement flag: Unknown Ranged
-    pub fn unk_ranged(&self) -> bool { (self.movement_flags & 0x200) != 0 }
+    pub fn unk_ranged(&self) -> bool {
+        (self.movement_flags & 0x200) != 0
+    }
     /// Check movement flag: Unknown Melee
-    pub fn unk_melee(&self) -> bool { (self.movement_flags & 0x100) != 0 }
+    pub fn unk_melee(&self) -> bool {
+        (self.movement_flags & 0x100) != 0
+    }
     /// Check movement flag: Ranged Attack
-    pub fn ranged_atk(&self) -> bool { (self.movement_flags & 0x080) != 0 }
+    pub fn ranged_atk(&self) -> bool {
+        (self.movement_flags & 0x080) != 0
+    }
     /// Check movement flag: Melee Attack
-    pub fn melee_atk(&self) -> bool { (self.movement_flags & 0x040) != 0 }
+    pub fn melee_atk(&self) -> bool {
+        (self.movement_flags & 0x040) != 0
+    }
     /// Check movement flag: Ranged Only
-    pub fn ranged_only(&self) -> bool { (self.movement_flags & 0x020) != 0 }
+    pub fn ranged_only(&self) -> bool {
+        (self.movement_flags & 0x020) != 0
+    }
     /// Check movement flag: Take Cover
-    pub fn take_cover(&self) -> bool { (self.movement_flags & 0x010) != 0 }
+    pub fn take_cover(&self) -> bool {
+        (self.movement_flags & 0x010) != 0
+    }
     /// Check movement flag: In Air
-    pub fn in_air(&self) -> bool { (self.movement_flags & 0x008) != 0 }
+    pub fn in_air(&self) -> bool {
+        (self.movement_flags & 0x008) != 0
+    }
     /// Check movement flag: On Ground
-    pub fn on_ground(&self) -> bool { (self.movement_flags & 0x004) != 0 }
+    pub fn on_ground(&self) -> bool {
+        (self.movement_flags & 0x004) != 0
+    }
     /// Check movement flag: Reserved
-    pub fn reserved(&self) -> bool { (self.movement_flags & 0x002) != 0 }
+    pub fn reserved(&self) -> bool {
+        (self.movement_flags & 0x002) != 0
+    }
     /// Check movement flag: May Move
-    pub fn may_move(&self) -> bool { (self.movement_flags & 0x001) != 0 }
+    pub fn may_move(&self) -> bool {
+        (self.movement_flags & 0x001) != 0
+    }
 }
 
 #[cfg(test)]
@@ -227,4 +256,3 @@ mod tests {
         assert_eq!(Enemy::ENTRY_SIZE, 136);
     }
 }
-

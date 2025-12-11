@@ -1,11 +1,11 @@
 //! Experience boost entry type (starting EXP for late-joining characters).
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
+use crate::game::region::GameVersion;
 use crate::io::{BinaryReader, BinaryWriter};
 
 /// Experience boost for a character that joins late.
@@ -45,15 +45,16 @@ impl ExpBoost {
         let blue_exp = cursor.read_u32_be()?;
         let yellow_exp = cursor.read_u32_be()?;
         let silver_exp = cursor.read_u32_be()?;
-        
+
         // Get character name from ID
         let character_name = match id {
             3 => "Drachma",
             4 => "Enrique",
             5 => "Gilder",
             _ => "???",
-        }.to_string();
-        
+        }
+        .to_string();
+
         Ok(Self {
             id,
             character_name,
@@ -71,9 +72,9 @@ impl ExpBoost {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::EXP_BOOST;
-        
+
         for id in id_range {
             if cursor.position() as usize + Self::ENTRY_SIZE > data.len() {
                 break;
@@ -81,7 +82,7 @@ impl ExpBoost {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -112,4 +113,3 @@ mod tests {
         assert_eq!(ExpBoost::ENTRY_SIZE, 28);
     }
 }
-

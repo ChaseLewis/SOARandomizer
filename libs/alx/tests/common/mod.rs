@@ -49,7 +49,7 @@ static CACHED_GAME: OnceLock<std::sync::Mutex<Option<GameRoot>>> = OnceLock::new
 
 /// Get a cached game instance. This is useful for expensive operations
 /// that don't need a fresh game state each time.
-/// 
+///
 /// Note: The returned game is wrapped in a Mutex, so you'll need to lock it.
 /// For most tests, prefer `load_game()` for isolation.
 #[allow(dead_code)]
@@ -96,7 +96,7 @@ pub fn ensure_writable_iso() -> Option<PathBuf> {
 
     let state = WRITABLE_ISO_READY.get_or_init(|| {
         let path = PathBuf::from(WRITABLE_ISO_PATH);
-        
+
         // If the copy doesn't exist, create it
         if !path.exists() {
             eprintln!("Creating writable ISO copy (this may take a moment)...");
@@ -109,7 +109,7 @@ pub fn ensure_writable_iso() -> Option<PathBuf> {
             }
             eprintln!("Writable ISO copy created: {}", path.display());
         }
-        
+
         std::sync::Mutex::new(WritableIsoState {
             is_ready: true,
             path,

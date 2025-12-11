@@ -2,14 +2,14 @@
 //!
 //! Accessories use the same structure as armors.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use super::armor::{Armor, CharacterFlags};
 use super::traits::Trait;
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// Accessory entry (uses same structure as Armor).
@@ -60,7 +60,7 @@ impl Default for Accessory {
 impl Accessory {
     /// Size of one accessory entry in bytes (same as armor).
     pub const ENTRY_SIZE: usize = Armor::ENTRY_SIZE;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_CHAR_FLAGS: usize = 17;
     const OFF_SELL_PERCENT: usize = 18;
@@ -77,28 +77,33 @@ impl Accessory {
         let sell_percent = cursor.read_i8()?;
         let order1 = cursor.read_i8()?;
         let order2 = cursor.read_i8()?;
-        
+
         // Padding byte (JP/US only)
         if version.region != Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let buy_price = cursor.read_u16_be()?;
-        
+
         // Read 4 traits
-        let mut traits = [Trait::default(), Trait::default(), Trait::default(), Trait::default()];
+        let mut traits = [
+            Trait::default(),
+            Trait::default(),
+            Trait::default(),
+            Trait::default(),
+        ];
         for trait_slot in &mut traits {
             trait_slot.id = cursor.read_i8()?;
             let _pad = cursor.read_u8()?; // padding
             trait_slot.value = cursor.read_i16_be()?;
         }
-        
+
         // EU has extra padding
         if version.region == Region::Eu {
             let _pad1 = cursor.read_u8()?;
             let _pad2 = cursor.read_u8()?;
         }
-        
+
         Ok(Self {
             id,
             name,
@@ -118,10 +123,10 @@ impl Accessory {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut accessories = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::ACCESSORY;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -129,7 +134,7 @@ impl Accessory {
             let accessory = Self::read_one(&mut cursor, id, version)?;
             accessories.push(accessory);
         }
-        
+
         Ok(accessories)
     }
 
@@ -148,14 +153,15 @@ impl Accessory {
         buf[Self::OFF_SELL_PERCENT] = self.sell_percent as u8;
         buf[Self::OFF_ORDER1] = self.order1 as u8;
         buf[Self::OFF_ORDER2] = self.order2 as u8;
-        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
-        
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE + 2]
+            .copy_from_slice(&self.buy_price.to_be_bytes());
+
         // Traits: each 4 bytes (id=1, pad=1, value=2)
         for (i, t) in self.traits.iter().enumerate() {
             let off = Self::OFF_TRAITS + i * 4;
             buf[off] = t.id as u8;
             // Skip pad at off+1
-            buf[off+2..off+4].copy_from_slice(&t.value.to_be_bytes());
+            buf[off + 2..off + 4].copy_from_slice(&t.value.to_be_bytes());
         }
     }
 
@@ -191,12 +197,9 @@ mod tests {
             0,    // padding
             0x00, 0x64, // buy_price = 100 (big-endian)
             // Trait 1: id=0 (Power), pad, value=5
-            0, 0, 0x00, 0x05,
-            // Trait 2: id=-1 (None), pad, value=0
-            0xFF, 0, 0x00, 0x00,
-            // Trait 3: id=-1 (None), pad, value=0
-            0xFF, 0, 0x00, 0x00,
-            // Trait 4: id=-1 (None), pad, value=0
+            0, 0, 0x00, 0x05, // Trait 2: id=-1 (None), pad, value=0
+            0xFF, 0, 0x00, 0x00, // Trait 3: id=-1 (None), pad, value=0
+            0xFF, 0, 0x00, 0x00, // Trait 4: id=-1 (None), pad, value=0
             0xFF, 0, 0x00, 0x00,
         ];
 
@@ -225,4 +228,3 @@ mod tests {
         assert_eq!(original, output, "Patch round-trip failed");
     }
 }
-

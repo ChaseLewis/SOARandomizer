@@ -4,11 +4,16 @@ use std::path::Path;
 
 use super::offsets::Offsets;
 use super::region::GameVersion;
-use crate::entries::{Accessory, Armor, Weapon, WeaponEffect, UsableItem, SpecialItem, Character, CharacterMagic, CharacterSuperMove, CrewMember, PlayableShip, ShipCannon, ShipAccessory, ShipItem, EnemyShip, EnemyMagic, EnemySuperMove, Enemy, EnemyTask, Swashbuckler, SpiritCurve, ExpBoost, ExpCurve, MagicExpCurve, Shop, TreasureChest};
-use crate::io::{parse_enp, parse_evp, parse_dat_file, decompress_aklz};
-use crate::items::ItemDatabase;
+use crate::entries::{
+    Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy, EnemyMagic,
+    EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve, MagicExpCurve, PlayableShip,
+    ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem, SpiritCurve, Swashbuckler,
+    TreasureChest, UsableItem, Weapon, WeaponEffect,
+};
 use crate::error::{Error, Result};
-use crate::io::{IsoFile, read_description_strings};
+use crate::io::{decompress_aklz, parse_dat_file, parse_enp, parse_evp};
+use crate::io::{read_description_strings, IsoFile};
+use crate::items::ItemDatabase;
 
 /// Main interface for working with a Skies of Arcadia Legends ISO.
 pub struct GameRoot {
@@ -25,17 +30,15 @@ impl GameRoot {
     /// Open a game ISO and detect its version.
     pub fn open(path: &Path) -> Result<Self> {
         let mut iso = IsoFile::open(path)?;
-        
+
         // Read game ID to detect version
         let game_id = iso.read_game_id()?;
-        let version = GameVersion::from_game_id(&game_id)
-            .ok_or_else(|| Error::InvalidIso(format!(
-                "Not a Skies of Arcadia Legends ISO: {}",
-                game_id
-            )))?;
-        
+        let version = GameVersion::from_game_id(&game_id).ok_or_else(|| {
+            Error::InvalidIso(format!("Not a Skies of Arcadia Legends ISO: {}", game_id))
+        })?;
+
         let offsets = Offsets::for_version(&version)?;
-        
+
         Ok(Self {
             iso,
             version,
@@ -56,7 +59,10 @@ impl GameRoot {
     }
 
     /// List files in the ISO matching a pattern.
-    pub fn list_iso_files_matching(&mut self, pattern: &str) -> Result<Vec<crate::io::IsoFileEntry>> {
+    pub fn list_iso_files_matching(
+        &mut self,
+        pattern: &str,
+    ) -> Result<Vec<crate::io::IsoFileEntry>> {
         self.iso.list_files_matching(pattern)
     }
 
@@ -95,7 +101,9 @@ impl GameRoot {
                 offset: range.start,
                 message: format!(
                     "Range {:x}..{:x} exceeds DOL size {:x}",
-                    range.start, range.end, dol.len()
+                    range.start,
+                    range.end,
+                    dol.len()
                 ),
             });
         }
@@ -118,13 +126,19 @@ impl GameRoot {
         if range.end > dol.len() {
             return Err(Error::ParseError {
                 offset: range.start,
-                message: format!("Range {:x}..{:x} exceeds DOL size {:x}", range.start, range.end, dol.len()),
+                message: format!(
+                    "Range {:x}..{:x} exceeds DOL size {:x}",
+                    range.start,
+                    range.end,
+                    dol.len()
+                ),
             });
         }
         if range.len() != data.len() {
             return Err(Error::ValidationError(format!(
                 "Data length {} does not match range length {}",
-                data.len(), range.len()
+                data.len(),
+                range.len()
             )));
         }
         dol[range].copy_from_slice(data);
@@ -159,7 +173,9 @@ impl GameRoot {
                 offset: range.start,
                 message: format!(
                     "Range {:x}..{:x} exceeds level file size {:x}",
-                    range.start, range.end, level.len()
+                    range.start,
+                    range.end,
+                    level.len()
                 ),
             });
         }
@@ -182,13 +198,19 @@ impl GameRoot {
         if range.end > level.len() {
             return Err(Error::ParseError {
                 offset: range.start,
-                message: format!("Range {:x}..{:x} exceeds level file size {:x}", range.start, range.end, level.len()),
+                message: format!(
+                    "Range {:x}..{:x} exceeds level file size {:x}",
+                    range.start,
+                    range.end,
+                    level.len()
+                ),
             });
         }
         if range.len() != data.len() {
             return Err(Error::ValidationError(format!(
                 "Data length {} does not match range length {}",
-                data.len(), range.len()
+                data.len(),
+                range.len()
             )));
         }
         level[range].copy_from_slice(data);
@@ -211,7 +233,10 @@ impl GameRoot {
     /// Write accessories to the DOL.
     pub fn write_accessories(&mut self, accessories: &[Accessory]) -> Result<()> {
         let data_range = self.offsets.accessory_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         Accessory::patch_all(accessories, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -220,7 +245,10 @@ impl GameRoot {
     /// Write armors to the DOL (patch approach).
     pub fn write_armors(&mut self, armors: &[Armor]) -> Result<()> {
         let data_range = self.offsets.armor_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         Armor::patch_all(armors, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -229,7 +257,10 @@ impl GameRoot {
     /// Write weapons to the DOL (patch approach).
     pub fn write_weapons(&mut self, weapons: &[Weapon]) -> Result<()> {
         let data_range = self.offsets.weapon_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         Weapon::patch_all(weapons, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -238,7 +269,10 @@ impl GameRoot {
     /// Write usable items to the DOL (patch approach).
     pub fn write_usable_items(&mut self, items: &[UsableItem]) -> Result<()> {
         let data_range = self.offsets.usable_item_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         UsableItem::patch_all(items, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -247,7 +281,10 @@ impl GameRoot {
     /// Write special items to the DOL (patch approach).
     pub fn write_special_items(&mut self, items: &[SpecialItem]) -> Result<()> {
         let data_range = self.offsets.special_item_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         SpecialItem::patch_all(items, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -257,7 +294,10 @@ impl GameRoot {
     pub fn write_characters(&mut self, characters: &[Character]) -> Result<()> {
         let data_range = self.offsets.character_data.clone();
         // Read original section, patch only numeric fields, write back
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         Character::patch_all(characters, &mut buffer);
         self.write_to_dol(data_range, &buffer)
@@ -266,7 +306,10 @@ impl GameRoot {
     /// Write character magic to the DOL (patch approach).
     pub fn write_character_magic(&mut self, magic: &[CharacterMagic]) -> Result<()> {
         let data_range = self.offsets.character_magic_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         CharacterMagic::patch_all(magic, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -275,7 +318,10 @@ impl GameRoot {
     /// Write character super moves to the DOL (patch approach).
     pub fn write_character_super_moves(&mut self, moves: &[CharacterSuperMove]) -> Result<()> {
         let data_range = self.offsets.character_super_move_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         CharacterSuperMove::patch_all(moves, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -284,7 +330,10 @@ impl GameRoot {
     /// Write shops to the DOL (patch approach).
     pub fn write_shops(&mut self, shops: &[Shop]) -> Result<()> {
         let data_range = self.offsets.shop_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         Shop::patch_all(shops, &mut buffer);
         self.write_to_dol(data_range, &buffer)
@@ -293,7 +342,10 @@ impl GameRoot {
     /// Write treasure chests to the DOL (patch approach).
     pub fn write_treasure_chests(&mut self, chests: &[TreasureChest]) -> Result<()> {
         let data_range = self.offsets.treasure_chest_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         TreasureChest::patch_all(chests, &mut buffer);
         self.write_to_dol(data_range, &buffer)
@@ -302,7 +354,10 @@ impl GameRoot {
     /// Write crew members to the DOL (patch approach).
     pub fn write_crew_members(&mut self, members: &[CrewMember]) -> Result<()> {
         let data_range = self.offsets.crew_member_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         CrewMember::patch_all(members, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -311,7 +366,10 @@ impl GameRoot {
     /// Write playable ships to the DOL (patch approach).
     pub fn write_playable_ships(&mut self, ships: &[PlayableShip]) -> Result<()> {
         let data_range = self.offsets.playable_ship_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         PlayableShip::patch_all(ships, &mut buffer);
         self.write_to_dol(data_range, &buffer)
@@ -320,7 +378,10 @@ impl GameRoot {
     /// Write ship cannons to the DOL (patch approach).
     pub fn write_ship_cannons(&mut self, cannons: &[ShipCannon]) -> Result<()> {
         let data_range = self.offsets.ship_cannon_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         ShipCannon::patch_all(cannons, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -329,7 +390,10 @@ impl GameRoot {
     /// Write ship accessories to the DOL (patch approach).
     pub fn write_ship_accessories(&mut self, accessories: &[ShipAccessory]) -> Result<()> {
         let data_range = self.offsets.ship_accessory_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         ShipAccessory::patch_all(accessories, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -338,7 +402,10 @@ impl GameRoot {
     /// Write ship items to the DOL (patch approach).
     pub fn write_ship_items(&mut self, items: &[ShipItem]) -> Result<()> {
         let data_range = self.offsets.ship_item_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         ShipItem::patch_all(items, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -347,7 +414,10 @@ impl GameRoot {
     /// Write enemy ships to the DOL (patch approach).
     pub fn write_enemy_ships(&mut self, ships: &[EnemyShip]) -> Result<()> {
         let data_range = self.offsets.enemy_ship_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         EnemyShip::patch_all(ships, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -356,7 +426,10 @@ impl GameRoot {
     /// Write enemy magic to the DOL (patch approach).
     pub fn write_enemy_magic(&mut self, magic: &[EnemyMagic]) -> Result<()> {
         let data_range = self.offsets.enemy_magic_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         EnemyMagic::patch_all(magic, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -365,7 +438,10 @@ impl GameRoot {
     /// Write enemy super moves to the DOL (patch approach).
     pub fn write_enemy_super_moves(&mut self, moves: &[EnemySuperMove]) -> Result<()> {
         let data_range = self.offsets.enemy_super_move_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         EnemySuperMove::patch_all(moves, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -374,7 +450,10 @@ impl GameRoot {
     /// Write swashbucklers to the DOL (patch approach).
     pub fn write_swashbucklers(&mut self, swashbucklers: &[Swashbuckler]) -> Result<()> {
         let data_range = self.offsets.swashbuckler_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         Swashbuckler::patch_all(swashbucklers, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -383,7 +462,10 @@ impl GameRoot {
     /// Write spirit curves to the DOL (patch approach).
     pub fn write_spirit_curves(&mut self, curves: &[SpiritCurve]) -> Result<()> {
         let data_range = self.offsets.spirit_curve_data.clone();
-        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let dol = self
+            .dol_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
         let mut buffer = dol[data_range.clone()].to_vec();
         SpiritCurve::patch_all(curves, &mut buffer, &self.version);
         self.write_to_dol(data_range, &buffer)
@@ -392,7 +474,10 @@ impl GameRoot {
     /// Write exp boosts to the DOL (patch approach).
     pub fn write_exp_boosts(&mut self, boosts: &[ExpBoost]) -> Result<()> {
         if let Some(data_range) = self.offsets.exp_boost_data.clone() {
-            let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+            let dol = self
+                .dol_data
+                .as_ref()
+                .ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
             let mut buffer = dol[data_range.clone()].to_vec();
             ExpBoost::patch_all(boosts, &mut buffer, &self.version);
             self.write_to_dol(data_range, &buffer)
@@ -404,7 +489,10 @@ impl GameRoot {
     /// Write EXP curves to the level file (patch approach).
     pub fn write_exp_curves(&mut self, curves: &[ExpCurve]) -> Result<()> {
         let data_range = self.offsets.exp_curve_data.clone();
-        let level = self.level_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("Level file not loaded".into()))?;
+        let level = self
+            .level_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("Level file not loaded".into()))?;
         let mut buffer = level[data_range.clone()].to_vec();
         ExpCurve::patch_all(curves, &mut buffer);
         self.write_to_level(data_range, &buffer)
@@ -413,7 +501,10 @@ impl GameRoot {
     /// Write Magic EXP curves to the level file (patch approach).
     pub fn write_magic_exp_curves(&mut self, curves: &[MagicExpCurve]) -> Result<()> {
         let data_range = self.offsets.magic_exp_curve_data.clone();
-        let level = self.level_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("Level file not loaded".into()))?;
+        let level = self
+            .level_data
+            .as_ref()
+            .ok_or_else(|| crate::error::Error::InvalidIso("Level file not loaded".into()))?;
         let mut buffer = level[data_range.clone()].to_vec();
         MagicExpCurve::patch_all(curves, &mut buffer);
         self.write_to_level(data_range, &buffer)
@@ -427,27 +518,27 @@ impl GameRoot {
     pub fn read_accessories(&mut self) -> Result<Vec<Accessory>> {
         let data_range = self.offsets.accessory_data.clone();
         let dscr_range = self.offsets.accessory_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut accessories = Accessory::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions
         if dscr_range.start < dscr_range.end {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
             let descriptions = read_description_strings(
-                &dscr_data, 
-                dscr_range.start, 
-                accessories.len(), 
-                4  // 4-byte alignment for US/JP
+                &dscr_data,
+                dscr_range.start,
+                accessories.len(),
+                4, // 4-byte alignment for US/JP
             )?;
-            
+
             for (acc, (pos, size, text)) in accessories.iter_mut().zip(descriptions) {
                 acc.description_pos = pos;
                 acc.description_size = size;
                 acc.description = text;
             }
         }
-        
+
         Ok(accessories)
     }
 
@@ -455,27 +546,23 @@ impl GameRoot {
     pub fn read_armors(&mut self) -> Result<Vec<Armor>> {
         let data_range = self.offsets.armor_data.clone();
         let dscr_range = self.offsets.armor_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut armors = Armor::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions
         if dscr_range.start < dscr_range.end {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(
-                &dscr_data, 
-                dscr_range.start, 
-                armors.len(), 
-                4
-            )?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, armors.len(), 4)?;
+
             for (armor, (pos, size, text)) in armors.iter_mut().zip(descriptions) {
                 armor.description_pos = pos;
                 armor.description_size = size;
                 armor.description = text;
             }
         }
-        
+
         Ok(armors)
     }
 
@@ -483,27 +570,23 @@ impl GameRoot {
     pub fn read_weapons(&mut self) -> Result<Vec<Weapon>> {
         let data_range = self.offsets.weapon_data.clone();
         let dscr_range = self.offsets.weapon_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut weapons = Weapon::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions
         if dscr_range.start < dscr_range.end {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(
-                &dscr_data, 
-                dscr_range.start, 
-                weapons.len(), 
-                4
-            )?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, weapons.len(), 4)?;
+
             for (weapon, (pos, size, text)) in weapons.iter_mut().zip(descriptions) {
                 weapon.description_pos = pos;
                 weapon.description_size = size;
                 weapon.description = text;
             }
         }
-        
+
         Ok(weapons)
     }
 
@@ -518,27 +601,23 @@ impl GameRoot {
     pub fn read_usable_items(&mut self) -> Result<Vec<UsableItem>> {
         let data_range = self.offsets.usable_item_data.clone();
         let dscr_range = self.offsets.usable_item_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut items = UsableItem::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions
         if dscr_range.start < dscr_range.end {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(
-                &dscr_data, 
-                dscr_range.start, 
-                items.len(), 
-                4
-            )?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, items.len(), 4)?;
+
             for (item, (pos, size, text)) in items.iter_mut().zip(descriptions) {
                 item.description_pos = pos;
                 item.description_size = size;
                 item.description = text;
             }
         }
-        
+
         Ok(items)
     }
 
@@ -546,27 +625,23 @@ impl GameRoot {
     pub fn read_special_items(&mut self) -> Result<Vec<SpecialItem>> {
         let data_range = self.offsets.special_item_data.clone();
         let dscr_range = self.offsets.special_item_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut items = SpecialItem::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions
         if dscr_range.start < dscr_range.end {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(
-                &dscr_data, 
-                dscr_range.start, 
-                items.len(), 
-                4
-            )?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, items.len(), 4)?;
+
             for (item, (pos, size, text)) in items.iter_mut().zip(descriptions) {
                 item.description_pos = pos;
                 item.description_size = size;
                 item.description = text;
             }
         }
-        
+
         Ok(items)
     }
 
@@ -581,27 +656,23 @@ impl GameRoot {
     pub fn read_character_magic(&mut self) -> Result<Vec<CharacterMagic>> {
         let data_range = self.offsets.character_magic_data.clone();
         let dscr_range = self.offsets.character_magic_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut magics = CharacterMagic::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions
         if dscr_range.start < dscr_range.end {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(
-                &dscr_data, 
-                dscr_range.start, 
-                magics.len(), 
-                4
-            )?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, magics.len(), 4)?;
+
             for (magic, (pos, size, text)) in magics.iter_mut().zip(descriptions) {
                 magic.description_pos = pos;
                 magic.description_size = size;
                 magic.description = text;
             }
         }
-        
+
         Ok(magics)
     }
 
@@ -609,27 +680,23 @@ impl GameRoot {
     pub fn read_shops(&mut self) -> Result<Vec<Shop>> {
         let data_range = self.offsets.shop_data.clone();
         let dscr_range = self.offsets.shop_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut shops = Shop::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions
         if dscr_range.start < dscr_range.end {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(
-                &dscr_data, 
-                dscr_range.start, 
-                shops.len(), 
-                4
-            )?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, shops.len(), 4)?;
+
             for (shop, (pos, size, text)) in shops.iter_mut().zip(descriptions) {
                 shop.description_pos = pos;
                 shop.description_size = size;
                 shop.description = text;
             }
         }
-        
+
         Ok(shops)
     }
 
@@ -651,7 +718,7 @@ impl GameRoot {
         let ship_cannons = self.read_ship_cannons()?;
         let ship_accessories = self.read_ship_accessories()?;
         let ship_items = self.read_ship_items()?;
-        
+
         Ok(ItemDatabase::from_game_data(
             &weapons,
             &armors,
@@ -668,22 +735,23 @@ impl GameRoot {
     pub fn read_character_super_moves(&mut self) -> Result<Vec<CharacterSuperMove>> {
         let data_range = self.offsets.character_super_move_data.clone();
         let dscr_range = self.offsets.character_super_move_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut entries = CharacterSuperMove::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions if range is valid
         if !dscr_range.is_empty() {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
+
             for (entry, (pos, size, text)) in entries.iter_mut().zip(descriptions.iter()) {
                 entry.description_pos = *pos;
                 entry.description_size = *size;
                 entry.description = text.clone();
             }
         }
-        
+
         Ok(entries)
     }
 
@@ -691,22 +759,23 @@ impl GameRoot {
     pub fn read_crew_members(&mut self) -> Result<Vec<CrewMember>> {
         let data_range = self.offsets.crew_member_data.clone();
         let dscr_range = self.offsets.crew_member_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut entries = CrewMember::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions if range is valid
         if !dscr_range.is_empty() {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
+
             for (entry, (pos, size, text)) in entries.iter_mut().zip(descriptions.iter()) {
                 entry.description_pos = *pos;
                 entry.description_size = *size;
                 entry.description = text.clone();
             }
         }
-        
+
         Ok(entries)
     }
 
@@ -721,22 +790,23 @@ impl GameRoot {
     pub fn read_ship_cannons(&mut self) -> Result<Vec<ShipCannon>> {
         let data_range = self.offsets.ship_cannon_data.clone();
         let dscr_range = self.offsets.ship_cannon_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut entries = ShipCannon::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions if range is valid
         if !dscr_range.is_empty() {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
+
             for (entry, (pos, size, text)) in entries.iter_mut().zip(descriptions.iter()) {
                 entry.description_pos = *pos;
                 entry.description_size = *size;
                 entry.description = text.clone();
             }
         }
-        
+
         Ok(entries)
     }
 
@@ -744,22 +814,23 @@ impl GameRoot {
     pub fn read_ship_accessories(&mut self) -> Result<Vec<ShipAccessory>> {
         let data_range = self.offsets.ship_accessory_data.clone();
         let dscr_range = self.offsets.ship_accessory_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut entries = ShipAccessory::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions if range is valid
         if !dscr_range.is_empty() {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
+
             for (entry, (pos, size, text)) in entries.iter_mut().zip(descriptions.iter()) {
                 entry.description_pos = *pos;
                 entry.description_size = *size;
                 entry.description = text.clone();
             }
         }
-        
+
         Ok(entries)
     }
 
@@ -767,22 +838,23 @@ impl GameRoot {
     pub fn read_ship_items(&mut self) -> Result<Vec<ShipItem>> {
         let data_range = self.offsets.ship_item_data.clone();
         let dscr_range = self.offsets.ship_item_dscr.clone();
-        
+
         let data = self.dol_slice(data_range)?.to_vec();
         let mut entries = ShipItem::read_all_data(&data, &self.version)?;
-        
+
         // Read descriptions if range is valid
         if !dscr_range.is_empty() {
             let dscr_data = self.dol_slice(dscr_range.clone())?.to_vec();
-            let descriptions = read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
-            
+            let descriptions =
+                read_description_strings(&dscr_data, dscr_range.start, entries.len(), 4)?;
+
             for (entry, (pos, size, text)) in entries.iter_mut().zip(descriptions.iter()) {
                 entry.description_pos = *pos;
                 entry.description_size = *size;
                 entry.description = text.clone();
             }
         }
-        
+
         Ok(entries)
     }
 
@@ -847,7 +919,7 @@ impl GameRoot {
 
     /// Read all enemies from ENP, EVP, and DAT files in the ISO.
     /// Returns enemies and their tasks.
-    /// 
+    ///
     /// Enemy handling (matching Ruby ALX behavior):
     /// - Collect all enemies from all files
     /// - Post-process to handle duplicates:
@@ -857,54 +929,60 @@ impl GameRoot {
     pub fn read_enemies(&mut self) -> Result<(Vec<Enemy>, Vec<EnemyTask>)> {
         let mut raw_enemies: Vec<Enemy> = Vec::new();
         let mut all_tasks: Vec<EnemyTask> = Vec::new();
-        
+
         // 1. Read EVP file (epevent.evp) - scripted battle events
         if let Ok(evp_files) = self.iso.list_files_matching("epevent.evp") {
             for entry in &evp_files {
                 let raw_data = self.iso.read_file_direct(entry)?;
                 let data = decompress_aklz(&raw_data)?;
-                
-                let filename = entry.path.file_name()
+
+                let filename = entry
+                    .path
+                    .file_name()
                     .map(|s| s.to_string_lossy().to_string())
                     .unwrap_or_else(|| "epevent.evp".to_string());
-                
+
                 let parsed = parse_evp(&data, &filename, &self.version)?;
                 raw_enemies.extend(parsed.enemies);
                 all_tasks.extend(parsed.tasks);
             }
         }
-        
+
         // 2. Read ENP files (*_ep.enp) - field encounters
         let enp_files = self.iso.list_files_matching("_ep.enp")?;
-        
+
         for entry in &enp_files {
             let raw_data = self.iso.read_file_direct(entry)?;
             let data = decompress_aklz(&raw_data)?;
-            
-            let filename = entry.path.file_name()
+
+            let filename = entry
+                .path
+                .file_name()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| "*".to_string());
-            
+
             let parsed = parse_enp(&data, &filename, &self.version)?;
             raw_enemies.extend(parsed.enemies);
             all_tasks.extend(parsed.tasks);
         }
-        
+
         // 3. Read EC/EB DAT files - battle init enemies
         let ec_files = self.iso.list_files_matching("ecinit");
         let eb_files = self.iso.list_files_matching("ebinit");
-        
+
         for files_result in [ec_files, eb_files] {
             if let Ok(files) = files_result {
                 for entry in &files {
                     if entry.path.to_string_lossy().ends_with(".dat") {
                         let raw_data = self.iso.read_file_direct(entry)?;
                         let data = decompress_aklz(&raw_data)?;
-                        
-                        let filename = entry.path.file_name()
+
+                        let filename = entry
+                            .path
+                            .file_name()
                             .map(|s| s.to_string_lossy().to_string())
                             .unwrap_or_else(|| "*".to_string());
-                        
+
                         let parsed = parse_dat_file(&data, &filename, &self.version)?;
                         raw_enemies.extend(parsed.enemies);
                         all_tasks.extend(parsed.tasks);
@@ -912,25 +990,40 @@ impl GameRoot {
                 }
             }
         }
-        
+
         // Post-process: deduplicate enemies (matching Ruby ALX behavior)
         // 1. Enemies with IDENTICAL stats merge (files combined)
         // 2. Enemies with DIFFERENT stats stay separate
         // 3. After sorting, the entry with most files from ENP/EVP gets `*` filter
         use std::collections::HashMap;
-        
+
         // Helper to compute a stats key for comparison
         // Two enemies with same stats_key are considered identical
         // Use a string key to avoid tuple size limits
         fn stats_key(e: &Enemy) -> String {
             format!(
                 "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-                e.max_hp, e.exp, e.gold, e.attack, e.defense, e.mag_def,
-                e.quick, e.agile, e.level, e.counter, e.danger,
-                e.element_id, e.width, e.depth, e.will, e.vigor, e.hit, e.name_jp
+                e.max_hp,
+                e.exp,
+                e.gold,
+                e.attack,
+                e.defense,
+                e.mag_def,
+                e.quick,
+                e.agile,
+                e.level,
+                e.counter,
+                e.danger,
+                e.element_id,
+                e.width,
+                e.depth,
+                e.will,
+                e.vigor,
+                e.hit,
+                e.name_jp
             )
         }
-        
+
         // Helper to get order (ENP=0, EVP=1, DAT=2)
         fn file_order(filter: &str) -> u8 {
             if filter == "*" || filter.ends_with(".enp") {
@@ -941,25 +1034,25 @@ impl GameRoot {
                 2 // DAT files
             }
         }
-        
+
         // Group by (ID, stats_key) - enemies with same ID and stats merge
         let mut merged: HashMap<(u32, String), Enemy> = HashMap::new();
-        
+
         // Track which (id, stats) combinations appeared in multiple files
         use std::collections::HashSet;
         let mut multi_file: HashSet<(u32, String)> = HashSet::new();
-        
+
         for enemy in raw_enemies {
             let key = (enemy.id, stats_key(&enemy));
-            
+
             if let Some(existing) = merged.get_mut(&key) {
                 // Same ID and stats - mark as appearing in multiple files
                 multi_file.insert(key.clone());
-                
+
                 // Keep the filter with lower order (ENP < EVP < DAT)
                 let existing_order = file_order(&existing.filter);
                 let new_order = file_order(&enemy.filter);
-                
+
                 if new_order < existing_order {
                     // New file has better priority - switch to it
                     existing.filter = enemy.filter;
@@ -968,22 +1061,22 @@ impl GameRoot {
                 merged.insert(key, enemy);
             }
         }
-        
+
         // Now process merged enemies - apply filter summarization
         let mut all_enemies: Vec<Enemy> = Vec::new();
-        
+
         // Group by ID to apply filter rules
         let mut by_id: HashMap<u32, Vec<Enemy>> = HashMap::new();
         for (_, enemy) in merged {
             by_id.entry(enemy.id).or_default().push(enemy);
         }
-        
+
         for (_id, mut enemies) in by_id {
             if enemies.len() == 1 {
                 // Single stat variant for this ID
                 let mut enemy = enemies.remove(0);
                 let key = (enemy.id, stats_key(&enemy));
-                
+
                 // If this enemy appeared in multiple files, mark as global
                 if multi_file.contains(&key) {
                     let order = file_order(&enemy.filter);
@@ -994,34 +1087,36 @@ impl GameRoot {
                 all_enemies.push(enemy);
                 continue;
             }
-            
+
             // Multiple stat variants for this ID
             // Sort by: order (asc - ENP/EVP first), then filter name
             enemies.sort_by(|a, b| {
                 let a_order = file_order(&a.filter);
                 let b_order = file_order(&b.filter);
                 let cmp = a_order.cmp(&b_order);
-                if cmp != std::cmp::Ordering::Equal { return cmp; }
+                if cmp != std::cmp::Ordering::Equal {
+                    return cmp;
+                }
                 a.filter.cmp(&b.filter)
             });
-            
+
             // First enemy (lowest order = ENP/EVP) becomes global
             let mut first = enemies.remove(0);
             let first_order = file_order(&first.filter);
             let first_key = (first.id, stats_key(&first));
-            
+
             // If first entry is from ENP/EVP (order <= 1) OR appeared in multiple files, mark as global
             if first_order <= 1 || multi_file.contains(&first_key) {
                 first.filter = "*".to_string();
             }
             all_enemies.push(first);
-            
+
             // Remaining entries become file-specific
             for enemy in enemies {
                 all_enemies.push(enemy);
             }
         }
-        
+
         Ok((all_enemies, all_tasks))
     }
 }
@@ -1030,4 +1125,3 @@ impl GameRoot {
 mod tests {
     // Integration tests would go here
 }
-

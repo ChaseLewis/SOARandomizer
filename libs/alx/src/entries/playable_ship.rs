@@ -1,11 +1,11 @@
 //! Playable ship entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
+use crate::game::region::GameVersion;
 use crate::io::BinaryReader;
 
 /// A playable ship in the game.
@@ -50,7 +50,7 @@ pub struct PlayableShip {
 impl PlayableShip {
     /// Size of one entry in bytes (US/JP).
     pub const ENTRY_SIZE: usize = 100;
-    
+
     // Field offsets (name at 0-19 is NEVER written)
     const OFF_MAX_HP: usize = 20;
     const OFF_MAX_SP: usize = 24;
@@ -82,26 +82,26 @@ impl PlayableShip {
         let mag_def = cursor.read_i16_be()?;
         let quick = cursor.read_i16_be()?;
         let dodge = cursor.read_i16_be()?;
-        
+
         let mut elements = [0i16; 6];
         for i in 0..6 {
             elements[i] = cursor.read_i16_be()?;
         }
-        
+
         let mut cannon_ids = [0i16; 5];
         for i in 0..5 {
             cannon_ids[i] = cursor.read_i16_be()?;
         }
-        
+
         let mut accessory_ids = [0i16; 3];
         for i in 0..3 {
             accessory_ids[i] = cursor.read_i16_be()?;
         }
-        
+
         let value = cursor.read_u32_be()?;
         let _pad1 = cursor.read_i16_be()?;
         let _pad2 = cursor.read_i16_be()?;
-        
+
         let max_hp_growth = cursor.read_i32_be()?;
         let max_sp_growth = cursor.read_i16_be()?;
         let sp_growth = cursor.read_i16_be()?;
@@ -109,7 +109,7 @@ impl PlayableShip {
         let mag_def_growth = cursor.read_i16_be()?;
         let quick_growth = cursor.read_i16_be()?;
         let dodge_growth = cursor.read_i16_be()?;
-        
+
         // Remaining padding (6 i16 values)
         let _pad = [
             cursor.read_i16_be()?,
@@ -119,7 +119,7 @@ impl PlayableShip {
             cursor.read_i16_be()?,
             cursor.read_i16_be()?,
         ];
-        
+
         Ok(Self {
             id,
             name,
@@ -148,10 +148,10 @@ impl PlayableShip {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::PLAYABLE_SHIP;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -159,7 +159,7 @@ impl PlayableShip {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -169,33 +169,40 @@ impl PlayableShip {
 
     /// Patch a single ship entry in a mutable buffer.
     pub fn patch_entry(&self, buf: &mut [u8]) {
-        buf[Self::OFF_MAX_HP..Self::OFF_MAX_HP+4].copy_from_slice(&self.max_hp.to_be_bytes());
-        buf[Self::OFF_MAX_SP..Self::OFF_MAX_SP+2].copy_from_slice(&self.max_sp.to_be_bytes());
-        buf[Self::OFF_SP..Self::OFF_SP+2].copy_from_slice(&self.sp.to_be_bytes());
-        buf[Self::OFF_DEFENSE..Self::OFF_DEFENSE+2].copy_from_slice(&self.defense.to_be_bytes());
-        buf[Self::OFF_MAG_DEF..Self::OFF_MAG_DEF+2].copy_from_slice(&self.mag_def.to_be_bytes());
-        buf[Self::OFF_QUICK..Self::OFF_QUICK+2].copy_from_slice(&self.quick.to_be_bytes());
-        buf[Self::OFF_DODGE..Self::OFF_DODGE+2].copy_from_slice(&self.dodge.to_be_bytes());
+        buf[Self::OFF_MAX_HP..Self::OFF_MAX_HP + 4].copy_from_slice(&self.max_hp.to_be_bytes());
+        buf[Self::OFF_MAX_SP..Self::OFF_MAX_SP + 2].copy_from_slice(&self.max_sp.to_be_bytes());
+        buf[Self::OFF_SP..Self::OFF_SP + 2].copy_from_slice(&self.sp.to_be_bytes());
+        buf[Self::OFF_DEFENSE..Self::OFF_DEFENSE + 2].copy_from_slice(&self.defense.to_be_bytes());
+        buf[Self::OFF_MAG_DEF..Self::OFF_MAG_DEF + 2].copy_from_slice(&self.mag_def.to_be_bytes());
+        buf[Self::OFF_QUICK..Self::OFF_QUICK + 2].copy_from_slice(&self.quick.to_be_bytes());
+        buf[Self::OFF_DODGE..Self::OFF_DODGE + 2].copy_from_slice(&self.dodge.to_be_bytes());
         for (i, &e) in self.elements.iter().enumerate() {
             let off = Self::OFF_ELEMENTS + i * 2;
-            buf[off..off+2].copy_from_slice(&e.to_be_bytes());
+            buf[off..off + 2].copy_from_slice(&e.to_be_bytes());
         }
         for (i, &c) in self.cannon_ids.iter().enumerate() {
             let off = Self::OFF_CANNONS + i * 2;
-            buf[off..off+2].copy_from_slice(&c.to_be_bytes());
+            buf[off..off + 2].copy_from_slice(&c.to_be_bytes());
         }
         for (i, &a) in self.accessory_ids.iter().enumerate() {
             let off = Self::OFF_ACCESSORIES + i * 2;
-            buf[off..off+2].copy_from_slice(&a.to_be_bytes());
+            buf[off..off + 2].copy_from_slice(&a.to_be_bytes());
         }
-        buf[Self::OFF_VALUE..Self::OFF_VALUE+4].copy_from_slice(&self.value.to_be_bytes());
-        buf[Self::OFF_MAX_HP_GROWTH..Self::OFF_MAX_HP_GROWTH+4].copy_from_slice(&self.max_hp_growth.to_be_bytes());
-        buf[Self::OFF_MAX_SP_GROWTH..Self::OFF_MAX_SP_GROWTH+2].copy_from_slice(&self.max_sp_growth.to_be_bytes());
-        buf[Self::OFF_SP_GROWTH..Self::OFF_SP_GROWTH+2].copy_from_slice(&self.sp_growth.to_be_bytes());
-        buf[Self::OFF_DEF_GROWTH..Self::OFF_DEF_GROWTH+2].copy_from_slice(&self.defense_growth.to_be_bytes());
-        buf[Self::OFF_MAG_DEF_GROWTH..Self::OFF_MAG_DEF_GROWTH+2].copy_from_slice(&self.mag_def_growth.to_be_bytes());
-        buf[Self::OFF_QUICK_GROWTH..Self::OFF_QUICK_GROWTH+2].copy_from_slice(&self.quick_growth.to_be_bytes());
-        buf[Self::OFF_DODGE_GROWTH..Self::OFF_DODGE_GROWTH+2].copy_from_slice(&self.dodge_growth.to_be_bytes());
+        buf[Self::OFF_VALUE..Self::OFF_VALUE + 4].copy_from_slice(&self.value.to_be_bytes());
+        buf[Self::OFF_MAX_HP_GROWTH..Self::OFF_MAX_HP_GROWTH + 4]
+            .copy_from_slice(&self.max_hp_growth.to_be_bytes());
+        buf[Self::OFF_MAX_SP_GROWTH..Self::OFF_MAX_SP_GROWTH + 2]
+            .copy_from_slice(&self.max_sp_growth.to_be_bytes());
+        buf[Self::OFF_SP_GROWTH..Self::OFF_SP_GROWTH + 2]
+            .copy_from_slice(&self.sp_growth.to_be_bytes());
+        buf[Self::OFF_DEF_GROWTH..Self::OFF_DEF_GROWTH + 2]
+            .copy_from_slice(&self.defense_growth.to_be_bytes());
+        buf[Self::OFF_MAG_DEF_GROWTH..Self::OFF_MAG_DEF_GROWTH + 2]
+            .copy_from_slice(&self.mag_def_growth.to_be_bytes());
+        buf[Self::OFF_QUICK_GROWTH..Self::OFF_QUICK_GROWTH + 2]
+            .copy_from_slice(&self.quick_growth.to_be_bytes());
+        buf[Self::OFF_DODGE_GROWTH..Self::OFF_DODGE_GROWTH + 2]
+            .copy_from_slice(&self.dodge_growth.to_be_bytes());
     }
 
     /// Patch all ship entries into a buffer.
@@ -220,4 +227,3 @@ mod tests {
         assert_eq!(PlayableShip::ENTRY_SIZE, 100);
     }
 }
-

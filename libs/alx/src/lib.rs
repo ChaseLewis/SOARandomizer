@@ -21,15 +21,15 @@
 //! // Modify and write back...
 //! ```
 
-pub mod error;
-pub mod io;
-pub mod game;
-pub mod entries;
 pub mod csv;
-pub mod lookups;
+pub mod entries;
+pub mod error;
+pub mod game;
+pub mod io;
 pub mod items;
+pub mod lookups;
 
-pub use items::{ItemDatabase, ItemCategory};
+pub use items::{ItemCategory, ItemDatabase};
 
 pub use error::{Error, Result};
 pub use game::GameRoot;

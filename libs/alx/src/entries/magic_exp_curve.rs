@@ -1,11 +1,11 @@
 //! Magic EXP curve entry type (magic EXP per element per level for each character).
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
+use crate::game::region::GameVersion;
 use crate::io::BinaryReader;
 
 /// Magic EXP curve for a character (EXP requirements for each magic element).
@@ -43,7 +43,7 @@ impl MagicExpCurve {
         let mut blue_exp = [0u16; 6];
         let mut yellow_exp = [0u16; 6];
         let mut silver_exp = [0u16; 6];
-        
+
         for i in 0..6 {
             green_exp[i] = cursor.read_u16_be()?;
         }
@@ -62,7 +62,7 @@ impl MagicExpCurve {
         for i in 0..6 {
             silver_exp[i] = cursor.read_u16_be()?;
         }
-        
+
         // Get character name from ID
         let character_name = match id {
             0 => "Vyse",
@@ -72,8 +72,9 @@ impl MagicExpCurve {
             4 => "Enrique",
             5 => "Gilder",
             _ => "???",
-        }.to_string();
-        
+        }
+        .to_string();
+
         Ok(Self {
             id,
             character_name,
@@ -90,9 +91,9 @@ impl MagicExpCurve {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::MAGIC_EXP_CURVE;
-        
+
         for id in id_range {
             if cursor.position() as usize + Self::ENTRY_SIZE > data.len() {
                 break;
@@ -100,36 +101,36 @@ impl MagicExpCurve {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
     /// Patch a single Magic EXP curve entry in a mutable buffer.
     pub fn patch_entry(&self, buf: &mut [u8]) {
         let mut offset = 0;
-        
+
         for &exp in &self.green_exp {
-            buf[offset..offset+2].copy_from_slice(&exp.to_be_bytes());
+            buf[offset..offset + 2].copy_from_slice(&exp.to_be_bytes());
             offset += 2;
         }
         for &exp in &self.red_exp {
-            buf[offset..offset+2].copy_from_slice(&exp.to_be_bytes());
+            buf[offset..offset + 2].copy_from_slice(&exp.to_be_bytes());
             offset += 2;
         }
         for &exp in &self.purple_exp {
-            buf[offset..offset+2].copy_from_slice(&exp.to_be_bytes());
+            buf[offset..offset + 2].copy_from_slice(&exp.to_be_bytes());
             offset += 2;
         }
         for &exp in &self.blue_exp {
-            buf[offset..offset+2].copy_from_slice(&exp.to_be_bytes());
+            buf[offset..offset + 2].copy_from_slice(&exp.to_be_bytes());
             offset += 2;
         }
         for &exp in &self.yellow_exp {
-            buf[offset..offset+2].copy_from_slice(&exp.to_be_bytes());
+            buf[offset..offset + 2].copy_from_slice(&exp.to_be_bytes());
             offset += 2;
         }
         for &exp in &self.silver_exp {
-            buf[offset..offset+2].copy_from_slice(&exp.to_be_bytes());
+            buf[offset..offset + 2].copy_from_slice(&exp.to_be_bytes());
             offset += 2;
         }
     }
@@ -156,4 +157,3 @@ mod tests {
         assert_eq!(MagicExpCurve::ENTRY_SIZE, 72);
     }
 }
-

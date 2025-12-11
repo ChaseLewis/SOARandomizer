@@ -1,9 +1,9 @@
 //! Skies of Arcadia Legends Randomizer - Tauri Backend
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::State;
-use serde::{Deserialize, Serialize};
 
 use alx::game::GameRoot;
 
@@ -60,7 +60,7 @@ impl<T> CommandResult<T> {
 #[tauri::command]
 fn load_iso(path: String, state: State<AppState>) -> CommandResult<GameInfo> {
     let path_buf = PathBuf::from(&path);
-    
+
     if !path_buf.exists() {
         return CommandResult::err("File does not exist");
     }

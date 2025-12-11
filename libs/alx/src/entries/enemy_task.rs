@@ -1,7 +1,7 @@
 //! Enemy task entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
 use crate::io::BinaryReader;
@@ -28,11 +28,16 @@ impl EnemyTask {
     pub const ENTRY_SIZE: usize = 6;
 
     /// Read a single enemy task from binary data.
-    pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, enemy_id: u32, filter: &str) -> Result<Self> {
+    pub fn read_one(
+        cursor: &mut Cursor<&[u8]>,
+        id: u32,
+        enemy_id: u32,
+        filter: &str,
+    ) -> Result<Self> {
         let type_id = cursor.read_i16_be()?;
         let task_id = cursor.read_i16_be()?;
         let param_id = cursor.read_i16_be()?;
-        
+
         Ok(Self {
             id,
             enemy_id,
@@ -68,4 +73,3 @@ mod tests {
         assert_eq!(EnemyTask::ENTRY_SIZE, 6);
     }
 }
-

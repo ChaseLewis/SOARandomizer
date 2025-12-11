@@ -1,11 +1,11 @@
 //! Character magic (spells) and super moves entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// Character magic/spell entry.
@@ -100,12 +100,12 @@ impl Default for CharacterMagic {
 
 impl CharacterMagic {
     /// Size of one magic entry in bytes (JP/US).
-    /// 17 (name) + 1 (element) + 2 (order) + 1 (occasion) + 1 (effect_id) + 1 (scope) + 
-    /// 1 (category) + 1 (speed) + 1 (sp) + 2 (pad) + 2 (base) + 1 (type) + 1 (state_id) + 
-    /// 1 (state_miss) + 3 (pad) + 1 (ship_occ) + 1 (pad) + 2 (ship_eff_id) + 1 (ship_sp) + 
+    /// 17 (name) + 1 (element) + 2 (order) + 1 (occasion) + 1 (effect_id) + 1 (scope) +
+    /// 1 (category) + 1 (speed) + 1 (sp) + 2 (pad) + 2 (base) + 1 (type) + 1 (state_id) +
+    /// 1 (state_miss) + 3 (pad) + 1 (ship_occ) + 1 (pad) + 2 (ship_eff_id) + 1 (ship_sp) +
     /// 1 (ship_turns) + 2 (ship_base) + 1 (unknown) + 3 (pad) = 48 bytes
     pub const ENTRY_SIZE: usize = 48;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_ELEMENT_ID: usize = 17;
     const OFF_ORDER: usize = 18;
@@ -165,12 +165,12 @@ impl CharacterMagic {
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
         let name = cursor.read_string_fixed(17)?;
         let element_id = cursor.read_i8()?;
-        
+
         // EU has extra padding here
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let order = cursor.read_i16_be()?;
         let occasion_flags = cursor.read_u8()?;
         let effect_id = cursor.read_i8()?;
@@ -197,7 +197,7 @@ impl CharacterMagic {
         let _pad7 = cursor.read_u8()?;
         let _pad8 = cursor.read_u8()?;
         let _pad9 = cursor.read_u8()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -232,10 +232,10 @@ impl CharacterMagic {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut magics = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::CHARACTER_MAGIC;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -243,7 +243,7 @@ impl CharacterMagic {
             let magic = Self::read_one(&mut cursor, id, version)?;
             magics.push(magic);
         }
-        
+
         Ok(magics)
     }
 
@@ -257,22 +257,25 @@ impl CharacterMagic {
     /// Patch a single magic entry in a mutable buffer.
     pub fn patch_entry(&self, buf: &mut [u8]) {
         buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
-        buf[Self::OFF_ORDER..Self::OFF_ORDER+2].copy_from_slice(&self.order.to_be_bytes());
+        buf[Self::OFF_ORDER..Self::OFF_ORDER + 2].copy_from_slice(&self.order.to_be_bytes());
         buf[Self::OFF_OCCASION] = self.occasion_flags;
         buf[Self::OFF_EFFECT_ID] = self.effect_id as u8;
         buf[Self::OFF_SCOPE_ID] = self.scope_id;
         buf[Self::OFF_CATEGORY_ID] = self.category_id as u8;
         buf[Self::OFF_EFFECT_SPEED] = self.effect_speed as u8;
         buf[Self::OFF_EFFECT_SP] = self.effect_sp as u8;
-        buf[Self::OFF_EFFECT_BASE..Self::OFF_EFFECT_BASE+2].copy_from_slice(&self.effect_base.to_be_bytes());
+        buf[Self::OFF_EFFECT_BASE..Self::OFF_EFFECT_BASE + 2]
+            .copy_from_slice(&self.effect_base.to_be_bytes());
         buf[Self::OFF_TYPE_ID] = self.type_id as u8;
         buf[Self::OFF_STATE_ID] = self.state_id as u8;
         buf[Self::OFF_STATE_MISS] = self.state_miss as u8;
         buf[Self::OFF_SHIP_OCC_ID] = self.ship_occasion_id as u8;
-        buf[Self::OFF_SHIP_EFFECT_ID..Self::OFF_SHIP_EFFECT_ID+2].copy_from_slice(&self.ship_effect_id.to_be_bytes());
+        buf[Self::OFF_SHIP_EFFECT_ID..Self::OFF_SHIP_EFFECT_ID + 2]
+            .copy_from_slice(&self.ship_effect_id.to_be_bytes());
         buf[Self::OFF_SHIP_EFFECT_SP] = self.ship_effect_sp as u8;
         buf[Self::OFF_SHIP_EFFECT_TURNS] = self.ship_effect_turns as u8;
-        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE+2].copy_from_slice(&self.ship_effect_base.to_be_bytes());
+        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE + 2]
+            .copy_from_slice(&self.ship_effect_base.to_be_bytes());
         buf[Self::OFF_UNKNOWN] = self.unknown as u8;
     }
 

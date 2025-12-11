@@ -1,11 +1,11 @@
 //! Usable item entry type (potions, crystals, etc.)
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// Occasion flags for when an item can be used.
@@ -14,12 +14,18 @@ pub struct OccasionFlags(pub u8);
 
 impl OccasionFlags {
     /// Can be used in menu.
-    pub fn can_use_menu(&self) -> bool { (self.0 & 0x04) != 0 }
+    pub fn can_use_menu(&self) -> bool {
+        (self.0 & 0x04) != 0
+    }
     /// Can be used in battle.
-    pub fn can_use_battle(&self) -> bool { (self.0 & 0x02) != 0 }
+    pub fn can_use_battle(&self) -> bool {
+        (self.0 & 0x02) != 0
+    }
     /// Can be used in ship battle.
-    pub fn can_use_ship(&self) -> bool { (self.0 & 0x01) != 0 }
-    
+    pub fn can_use_ship(&self) -> bool {
+        (self.0 & 0x01) != 0
+    }
+
     /// Format as binary string (e.g., "0b0110").
     pub fn as_binary_string(&self) -> String {
         format!("0b{:04b}", self.0 & 0x07)
@@ -95,7 +101,7 @@ impl Default for UsableItem {
 impl UsableItem {
     /// Size of one usable item entry in bytes (JP/US).
     pub const ENTRY_SIZE: usize = 36;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_OCCASION: usize = 17;
     const OFF_EFFECT_ID: usize = 18;
@@ -162,12 +168,12 @@ impl UsableItem {
         let sell_percent = cursor.read_i8()?;
         let order1 = cursor.read_i8()?;
         let order2 = cursor.read_i8()?;
-        
+
         // EU has extra padding here
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let buy_price = cursor.read_u16_be()?;
         let _pad1 = cursor.read_u8()?;
         let _pad2 = cursor.read_u8()?;
@@ -176,7 +182,7 @@ impl UsableItem {
         let type_id = cursor.read_i8()?;
         let state_id = cursor.read_i16_be()?;
         let state_miss = cursor.read_i16_be()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -203,10 +209,10 @@ impl UsableItem {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut items = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::USABLE_ITEM;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -214,7 +220,7 @@ impl UsableItem {
             let item = Self::read_one(&mut cursor, id, version)?;
             items.push(item);
         }
-        
+
         Ok(items)
     }
 
@@ -234,12 +240,16 @@ impl UsableItem {
         buf[Self::OFF_SELL] = self.sell_percent as u8;
         buf[Self::OFF_ORDER1] = self.order1 as u8;
         buf[Self::OFF_ORDER2] = self.order2 as u8;
-        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
-        buf[Self::OFF_EFFECT_BASE..Self::OFF_EFFECT_BASE+2].copy_from_slice(&self.effect_base.to_be_bytes());
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE + 2]
+            .copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_EFFECT_BASE..Self::OFF_EFFECT_BASE + 2]
+            .copy_from_slice(&self.effect_base.to_be_bytes());
         buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
         buf[Self::OFF_TYPE_ID] = self.type_id as u8;
-        buf[Self::OFF_STATE_ID..Self::OFF_STATE_ID+2].copy_from_slice(&self.state_id.to_be_bytes());
-        buf[Self::OFF_STATE_MISS..Self::OFF_STATE_MISS+2].copy_from_slice(&self.state_miss.to_be_bytes());
+        buf[Self::OFF_STATE_ID..Self::OFF_STATE_ID + 2]
+            .copy_from_slice(&self.state_id.to_be_bytes());
+        buf[Self::OFF_STATE_MISS..Self::OFF_STATE_MISS + 2]
+            .copy_from_slice(&self.state_miss.to_be_bytes());
     }
 
     /// Patch all usable item entries into a buffer.

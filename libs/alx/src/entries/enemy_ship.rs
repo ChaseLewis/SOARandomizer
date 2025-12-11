@@ -1,11 +1,11 @@
 //! Enemy ship entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
+use crate::game::region::GameVersion;
 use crate::io::{BinaryReader, BinaryWriter};
 
 /// An armament slot on an enemy ship.
@@ -80,12 +80,12 @@ impl EnemyShip {
         let quick = cursor.read_i16_be()?;
         let agile = cursor.read_i16_be()?;
         let dodge = cursor.read_i16_be()?;
-        
+
         let mut elements = [0i16; 6];
         for i in 0..6 {
             elements[i] = cursor.read_i16_be()?;
         }
-        
+
         let mut armaments = [ShipArmament::default(); 4];
         for i in 0..4 {
             armaments[i] = ShipArmament {
@@ -96,15 +96,15 @@ impl EnemyShip {
                 element_id: cursor.read_i16_be()?,
             };
         }
-        
+
         // Padding (6 i16 values)
         for _ in 0..6 {
             let _pad = cursor.read_i16_be()?;
         }
-        
+
         let exp = cursor.read_i32_be()?;
         let gold = cursor.read_i32_be()?;
-        
+
         let mut item_drops = [ShipItemDrop::default(); 3];
         for i in 0..3 {
             item_drops[i] = ShipItemDrop {
@@ -112,7 +112,7 @@ impl EnemyShip {
                 item_id: cursor.read_i16_be()?,
             };
         }
-        
+
         Ok(Self {
             id,
             name,
@@ -135,10 +135,10 @@ impl EnemyShip {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::ENEMY_SHIP;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -146,7 +146,7 @@ impl EnemyShip {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -164,7 +164,9 @@ impl EnemyShip {
         writer.write_i16_be(self.quick)?;
         writer.write_i16_be(self.agile)?;
         writer.write_i16_be(self.dodge)?;
-        for &e in &self.elements { writer.write_i16_be(e)?; }
+        for &e in &self.elements {
+            writer.write_i16_be(e)?;
+        }
         for a in &self.armaments {
             writer.write_i16_be(a.type_id)?;
             writer.write_i16_be(a.attack)?;
@@ -172,7 +174,9 @@ impl EnemyShip {
             writer.write_i16_be(a.hit)?;
             writer.write_i16_be(a.element_id)?;
         }
-        for _ in 0..6 { writer.write_i16_be(0)?; }
+        for _ in 0..6 {
+            writer.write_i16_be(0)?;
+        }
         writer.write_i32_be(self.exp)?;
         writer.write_i32_be(self.gold)?;
         for d in &self.item_drops {
@@ -199,4 +203,3 @@ mod tests {
         assert_eq!(EnemyShip::ENTRY_SIZE, 120);
     }
 }
-

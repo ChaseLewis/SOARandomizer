@@ -1,16 +1,16 @@
 //! Weapon entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use super::traits::Trait;
 use crate::error::Result;
-use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
+use crate::game::region::{GameVersion, Region};
 use crate::io::BinaryReader;
 
 /// Weapon entry.
-/// 
+///
 /// Structure (JP/US, 32 bytes):
 /// - Name: 17 bytes (Shift-JIS)
 /// - Character ID: i8 (which character can equip)
@@ -81,7 +81,7 @@ impl Weapon {
     /// Size of one weapon entry in bytes (JP/US).
     /// 17 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 2 + 1 + 1 + 2 = 32 bytes
     pub const ENTRY_SIZE: usize = 32;
-    
+
     // Field offsets (name at 0-16 is NEVER written)
     const OFF_CHAR_ID: usize = 17;
     const OFF_SELL_PERCENT: usize = 18;
@@ -126,21 +126,21 @@ impl Weapon {
         let order1 = cursor.read_i8()?;
         let order2 = cursor.read_i8()?;
         let effect_id = cursor.read_i8()?;
-        
+
         // EU has extra padding here
         if version.region == Region::Eu {
             let _pad = cursor.read_u8()?;
         }
-        
+
         let buy_price = cursor.read_u16_be()?;
         let attack = cursor.read_i16_be()?;
         let hit_percent = cursor.read_i16_be()?;
-        
+
         // Single trait
         let trait_id = cursor.read_i8()?;
         let _pad = cursor.read_u8()?;
         let trait_value = cursor.read_i16_be()?;
-        
+
         Ok(Self {
             id,
             name,
@@ -152,7 +152,10 @@ impl Weapon {
             buy_price,
             attack,
             hit_percent,
-            trait_data: Trait { id: trait_id, value: trait_value },
+            trait_data: Trait {
+                id: trait_id,
+                value: trait_value,
+            },
             description: String::new(),
             description_pos: 0,
             description_size: 0,
@@ -163,10 +166,10 @@ impl Weapon {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut weapons = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::WEAPON;
         let entry_size = Self::entry_size_for_version(version);
-        
+
         for id in id_range {
             if cursor.position() as usize + entry_size > data.len() {
                 break;
@@ -174,7 +177,7 @@ impl Weapon {
             let weapon = Self::read_one(&mut cursor, id, version)?;
             weapons.push(weapon);
         }
-        
+
         Ok(weapons)
     }
 
@@ -193,11 +196,14 @@ impl Weapon {
         buf[Self::OFF_ORDER1] = self.order1 as u8;
         buf[Self::OFF_ORDER2] = self.order2 as u8;
         buf[Self::OFF_EFFECT_ID] = self.effect_id as u8;
-        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
-        buf[Self::OFF_ATTACK..Self::OFF_ATTACK+2].copy_from_slice(&self.attack.to_be_bytes());
-        buf[Self::OFF_HIT_PERCENT..Self::OFF_HIT_PERCENT+2].copy_from_slice(&self.hit_percent.to_be_bytes());
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE + 2]
+            .copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_ATTACK..Self::OFF_ATTACK + 2].copy_from_slice(&self.attack.to_be_bytes());
+        buf[Self::OFF_HIT_PERCENT..Self::OFF_HIT_PERCENT + 2]
+            .copy_from_slice(&self.hit_percent.to_be_bytes());
         buf[Self::OFF_TRAIT_ID] = self.trait_data.id as u8;
-        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE+2].copy_from_slice(&self.trait_data.value.to_be_bytes());
+        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE + 2]
+            .copy_from_slice(&self.trait_data.value.to_be_bytes());
     }
 
     /// Patch all weapon entries into a buffer.

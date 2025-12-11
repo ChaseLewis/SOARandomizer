@@ -62,7 +62,7 @@ impl GameVersion {
     }
 
     /// Detect the game version from a game ID string.
-    /// 
+    ///
     /// GameCube game IDs are 6 characters:
     /// - Bytes 0-3: Game code (e.g., "GEAE" for Skies of Arcadia Legends US)
     /// - Byte 4: Region code (E=US, J=JP, P=EU)
@@ -74,7 +74,7 @@ impl GameVersion {
 
         let game_code = &game_id[0..3];
         let region_code = game_id.chars().nth(3)?;
-        
+
         // Check if this is Skies of Arcadia / Eternal Arcadia
         if game_code != "GEA" {
             return None;
@@ -87,11 +87,7 @@ impl GameVersion {
             _ => return None,
         };
 
-        Some(Self::new(
-            Platform::GameCube,
-            region,
-            game_id.to_string(),
-        ))
+        Some(Self::new(Platform::GameCube, region, game_id.to_string()))
     }
 
     /// Get a version key for offset lookups.
@@ -165,4 +161,3 @@ mod tests {
         assert!(GameVersion::from_game_id("GEA").is_none());
     }
 }
-

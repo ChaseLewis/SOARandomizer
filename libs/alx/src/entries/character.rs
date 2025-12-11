@@ -1,11 +1,11 @@
 //! Playable character entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
+use crate::game::region::GameVersion;
 use crate::io::BinaryReader;
 
 /// Playable character entry.
@@ -129,7 +129,7 @@ impl Character {
     /// Size of one character entry in bytes.
     /// Based on Ruby: 11 + many fields = ~152 bytes
     pub const ENTRY_SIZE: usize = 152;
-    
+
     // Field offsets within entry (name at 0-10 is NEVER written)
     const OFF_AGE: usize = 11;
     const OFF_GENDER_ID: usize = 12;
@@ -206,17 +206,17 @@ impl Character {
         let exp = cursor.read_u32_be()?;
         let max_mp_growth = cursor.read_f32_be()?;
         let unknown1 = cursor.read_f32_be()?;
-        
+
         let mut element_resistances = [0i16; 6];
         for i in 0..6 {
             element_resistances[i] = cursor.read_i16_be()?;
         }
-        
+
         let mut state_resistances = [0i16; 15];
         for i in 0..15 {
             state_resistances[i] = cursor.read_i16_be()?;
         }
-        
+
         let danger = cursor.read_i16_be()?;
         let power = cursor.read_i16_be()?;
         let will = cursor.read_i16_be()?;
@@ -224,18 +224,18 @@ impl Character {
         let agile = cursor.read_i16_be()?;
         let quick = cursor.read_i16_be()?;
         let _pad3 = cursor.read_i16_be()?;
-        
+
         let power_growth = cursor.read_f32_be()?;
         let will_growth = cursor.read_f32_be()?;
         let vigor_growth = cursor.read_f32_be()?;
         let agile_growth = cursor.read_f32_be()?;
         let quick_growth = cursor.read_f32_be()?;
-        
+
         let mut magic_exp = [0i32; 6];
         for i in 0..6 {
             magic_exp[i] = cursor.read_i32_be()?;
         }
-        
+
         Ok(Self {
             id,
             name,
@@ -279,9 +279,9 @@ impl Character {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut characters = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::CHARACTER;
-        
+
         for id in id_range {
             if cursor.position() as usize + Self::ENTRY_SIZE > data.len() {
                 break;
@@ -289,7 +289,7 @@ impl Character {
             let character = Self::read_one(&mut cursor, id, version)?;
             characters.push(character);
         }
-        
+
         Ok(characters)
     }
 
@@ -297,13 +297,25 @@ impl Character {
     /// Only writes numeric fields at their exact offsets - strings and padding are untouched.
     pub fn patch_entry(&self, buf: &mut [u8]) {
         // Helper to write BE values at offset
-        fn put_i8(buf: &mut [u8], off: usize, v: i8) { buf[off] = v as u8; }
-        fn put_u16(buf: &mut [u8], off: usize, v: u16) { buf[off..off+2].copy_from_slice(&v.to_be_bytes()); }
-        fn put_i16(buf: &mut [u8], off: usize, v: i16) { buf[off..off+2].copy_from_slice(&v.to_be_bytes()); }
-        fn put_u32(buf: &mut [u8], off: usize, v: u32) { buf[off..off+4].copy_from_slice(&v.to_be_bytes()); }
-        fn put_i32(buf: &mut [u8], off: usize, v: i32) { buf[off..off+4].copy_from_slice(&v.to_be_bytes()); }
-        fn put_f32(buf: &mut [u8], off: usize, v: f32) { buf[off..off+4].copy_from_slice(&v.to_be_bytes()); }
-        
+        fn put_i8(buf: &mut [u8], off: usize, v: i8) {
+            buf[off] = v as u8;
+        }
+        fn put_u16(buf: &mut [u8], off: usize, v: u16) {
+            buf[off..off + 2].copy_from_slice(&v.to_be_bytes());
+        }
+        fn put_i16(buf: &mut [u8], off: usize, v: i16) {
+            buf[off..off + 2].copy_from_slice(&v.to_be_bytes());
+        }
+        fn put_u32(buf: &mut [u8], off: usize, v: u32) {
+            buf[off..off + 4].copy_from_slice(&v.to_be_bytes());
+        }
+        fn put_i32(buf: &mut [u8], off: usize, v: i32) {
+            buf[off..off + 4].copy_from_slice(&v.to_be_bytes());
+        }
+        fn put_f32(buf: &mut [u8], off: usize, v: f32) {
+            buf[off..off + 4].copy_from_slice(&v.to_be_bytes());
+        }
+
         // Write only numeric fields (skip name at 0-10, skip padding bytes)
         put_i8(buf, Self::OFF_AGE, self.age);
         put_i8(buf, Self::OFF_GENDER_ID, self.gender_id);
@@ -324,30 +336,30 @@ impl Character {
         put_u32(buf, Self::OFF_EXP, self.exp);
         put_f32(buf, Self::OFF_MAX_MP_GROWTH, self.max_mp_growth);
         put_f32(buf, Self::OFF_UNKNOWN1, self.unknown1);
-        
+
         // Element resistances
         for (i, &res) in self.element_resistances.iter().enumerate() {
             put_i16(buf, Self::OFF_ELEMENT_RESISTANCES + i * 2, res);
         }
-        
+
         // State resistances
         for (i, &res) in self.state_resistances.iter().enumerate() {
             put_i16(buf, Self::OFF_STATE_RESISTANCES + i * 2, res);
         }
-        
+
         put_i16(buf, Self::OFF_DANGER, self.danger);
         put_i16(buf, Self::OFF_POWER, self.power);
         put_i16(buf, Self::OFF_WILL, self.will);
         put_i16(buf, Self::OFF_VIGOR, self.vigor);
         put_i16(buf, Self::OFF_AGILE, self.agile);
         put_i16(buf, Self::OFF_QUICK, self.quick);
-        
+
         put_f32(buf, Self::OFF_POWER_GROWTH, self.power_growth);
         put_f32(buf, Self::OFF_WILL_GROWTH, self.will_growth);
         put_f32(buf, Self::OFF_VIGOR_GROWTH, self.vigor_growth);
         put_f32(buf, Self::OFF_AGILE_GROWTH, self.agile_growth);
         put_f32(buf, Self::OFF_QUICK_GROWTH, self.quick_growth);
-        
+
         // Magic EXP
         for (i, &exp) in self.magic_exp.iter().enumerate() {
             put_i32(buf, Self::OFF_MAGIC_EXP + i * 4, exp);

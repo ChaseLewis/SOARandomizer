@@ -14,12 +14,12 @@ const ISO_PATH: &str = "roms/Skies of Arcadia Legends (USA).iso";
 fn compare_csv_files(path1: &Path, path2: &Path) -> Vec<String> {
     let content1 = fs::read_to_string(path1).expect("Failed to read first file");
     let content2 = fs::read_to_string(path2).expect("Failed to read second file");
-    
+
     let lines1: Vec<&str> = content1.lines().collect();
     let lines2: Vec<&str> = content2.lines().collect();
-    
+
     let mut differences = Vec::new();
-    
+
     // Check header
     if lines1.first() != lines2.first() {
         differences.push(format!(
@@ -28,7 +28,7 @@ fn compare_csv_files(path1: &Path, path2: &Path) -> Vec<String> {
             lines2.first()
         ));
     }
-    
+
     // Check line counts
     if lines1.len() != lines2.len() {
         differences.push(format!(
@@ -37,13 +37,13 @@ fn compare_csv_files(path1: &Path, path2: &Path) -> Vec<String> {
             lines2.len()
         ));
     }
-    
+
     // Compare each line
     let max_lines = lines1.len().max(lines2.len());
     for i in 0..max_lines {
         let line1 = lines1.get(i);
         let line2 = lines2.get(i);
-        
+
         if line1 != line2 {
             differences.push(format!(
                 "Line {} differs:\n  Before: {:?}\n  After:  {:?}",
@@ -51,13 +51,13 @@ fn compare_csv_files(path1: &Path, path2: &Path) -> Vec<String> {
                 line1.unwrap_or(&"<missing>"),
                 line2.unwrap_or(&"<missing>")
             ));
-            
+
             // Show field-by-field diff for data rows
             if i > 0 {
                 if let (Some(l1), Some(l2)) = (line1, line2) {
                     let fields1: Vec<&str> = l1.split(',').collect();
                     let fields2: Vec<&str> = l2.split(',').collect();
-                    
+
                     for (j, (f1, f2)) in fields1.iter().zip(fields2.iter()).enumerate() {
                         if f1 != f2 {
                             differences.push(format!("    Field {}: '{}' -> '{}'", j, f1, f2));
@@ -67,7 +67,7 @@ fn compare_csv_files(path1: &Path, path2: &Path) -> Vec<String> {
             }
         }
     }
-    
+
     differences
 }
 
@@ -78,14 +78,14 @@ fn run_alx_rs(args: &[&str]) -> Result<(), String> {
         .args(args)
         .output()
         .expect("Failed to run alx_rs");
-    
+
     if !output.status.success() {
         return Err(format!(
             "alx_rs failed: {}",
             String::from_utf8_lossy(&output.stderr)
         ));
     }
-    
+
     Ok(())
 }
 
@@ -97,42 +97,48 @@ fn test_import_export_roundtrip() {
         eprintln!("Skipping test: ISO not found at {}", ISO_PATH);
         return;
     }
-    
+
     let test_dir = Path::new("target/test_import_roundtrip");
     let before_dir = test_dir.join("before");
     let after_dir = test_dir.join("after");
     let test_iso = test_dir.join("test.iso");
-    
+
     // Clean up from previous runs
     let _ = fs::remove_dir_all(test_dir);
     fs::create_dir_all(&before_dir).expect("Failed to create before dir");
     fs::create_dir_all(&after_dir).expect("Failed to create after dir");
-    
+
     // Step 1: Export from original ISO
     println!("Step 1: Exporting from original ISO...");
-    run_alx_rs(&[ISO_PATH, "--output", before_dir.to_str().unwrap()])
-        .expect("Export failed");
-    
+    run_alx_rs(&[ISO_PATH, "--output", before_dir.to_str().unwrap()]).expect("Export failed");
+
     // Step 2: Copy ISO and import the exported data
     println!("Step 2: Importing to copy of ISO...");
     run_alx_rs(&[
-        "--import", before_dir.to_str().unwrap(),
+        "--import",
+        before_dir.to_str().unwrap(),
         ISO_PATH,
-        "--output", test_iso.to_str().unwrap(),
-        "-y"
-    ]).expect("Import failed");
-    
+        "--output",
+        test_iso.to_str().unwrap(),
+        "-y",
+    ])
+    .expect("Import failed");
+
     // Step 3: Export from the modified ISO
     println!("Step 3: Exporting from modified ISO...");
-    run_alx_rs(&[test_iso.to_str().unwrap(), "--output", after_dir.to_str().unwrap()])
-        .expect("Re-export failed");
-    
+    run_alx_rs(&[
+        test_iso.to_str().unwrap(),
+        "--output",
+        after_dir.to_str().unwrap(),
+    ])
+    .expect("Re-export failed");
+
     // Step 4: Compare all CSV files
     println!("Step 4: Comparing CSV files...");
-    
+
     let csv_files = [
         "accessory.csv",
-        "armor.csv", 
+        "armor.csv",
         "weapon.csv",
         "usableitem.csv",
         "specialitem.csv",
@@ -153,28 +159,28 @@ fn test_import_export_roundtrip() {
         "spiritcurve.csv",
         "expboost.csv",
     ];
-    
+
     let mut all_passed = true;
     let mut failures = Vec::new();
-    
+
     for csv_file in &csv_files {
         let before_path = before_dir.join(csv_file);
         let after_path = after_dir.join(csv_file);
-        
+
         if !before_path.exists() {
             failures.push(format!("{}: Before file missing", csv_file));
             all_passed = false;
             continue;
         }
-        
+
         if !after_path.exists() {
             failures.push(format!("{}: After file missing", csv_file));
             all_passed = false;
             continue;
         }
-        
+
         let diffs = compare_csv_files(&before_path, &after_path);
-        
+
         if diffs.is_empty() {
             println!("  ✓ {}", csv_file);
         } else {
@@ -186,13 +192,17 @@ fn test_import_export_roundtrip() {
             all_passed = false;
         }
     }
-    
+
     // Clean up on success
     if all_passed {
         let _ = fs::remove_dir_all(test_dir);
     }
-    
-    assert!(all_passed, "CSV comparison failures:\n{}", failures.join("\n"));
+
+    assert!(
+        all_passed,
+        "CSV comparison failures:\n{}",
+        failures.join("\n")
+    );
 }
 
 /// Individual file roundtrip tests for faster debugging
@@ -205,41 +215,51 @@ macro_rules! roundtrip_test {
                 eprintln!("Skipping test: ISO not found at {}", ISO_PATH);
                 return;
             }
-            
+
             let test_dir = Path::new(concat!("target/test_rt_", stringify!($name)));
             let before_dir = test_dir.join("before");
             let after_dir = test_dir.join("after");
             let test_iso = test_dir.join("test.iso");
-            
+
             let _ = fs::remove_dir_all(test_dir);
             fs::create_dir_all(&before_dir).unwrap();
             fs::create_dir_all(&after_dir).unwrap();
-            
+
             // Export
             run_alx_rs(&[ISO_PATH, "--output", before_dir.to_str().unwrap()]).unwrap();
-            
+
             // Import
             run_alx_rs(&[
-                "--import", before_dir.to_str().unwrap(),
+                "--import",
+                before_dir.to_str().unwrap(),
                 ISO_PATH,
-                "--output", test_iso.to_str().unwrap(),
-                "-y"
-            ]).unwrap();
-            
+                "--output",
+                test_iso.to_str().unwrap(),
+                "-y",
+            ])
+            .unwrap();
+
             // Re-export
-            run_alx_rs(&[test_iso.to_str().unwrap(), "--output", after_dir.to_str().unwrap()]).unwrap();
-            
+            run_alx_rs(&[
+                test_iso.to_str().unwrap(),
+                "--output",
+                after_dir.to_str().unwrap(),
+            ])
+            .unwrap();
+
             // Compare
-            let diffs = compare_csv_files(
-                &before_dir.join($csv_file),
-                &after_dir.join($csv_file)
-            );
-            
+            let diffs = compare_csv_files(&before_dir.join($csv_file), &after_dir.join($csv_file));
+
             if diffs.is_empty() {
                 let _ = fs::remove_dir_all(test_dir);
             }
-            
-            assert!(diffs.is_empty(), "Differences in {}:\n{}", $csv_file, diffs.join("\n"));
+
+            assert!(
+                diffs.is_empty(),
+                "Differences in {}:\n{}",
+                $csv_file,
+                diffs.join("\n")
+            );
         }
     };
 }
@@ -265,4 +285,3 @@ roundtrip_test!(test_rt_enemysupermove, "enemysupermove.csv");
 roundtrip_test!(test_rt_swashbuckler, "swashbuckler.csv");
 roundtrip_test!(test_rt_spiritcurve, "spiritcurve.csv");
 roundtrip_test!(test_rt_expboost, "expboost.csv");
-

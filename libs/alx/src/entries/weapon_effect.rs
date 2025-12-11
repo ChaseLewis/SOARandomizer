@@ -1,7 +1,7 @@
 //! Weapon effect entry type.
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
 use crate::game::region::GameVersion;
@@ -46,7 +46,7 @@ impl WeaponEffect {
         let effect_id = cursor.read_i8()?;
         let state_id = cursor.read_i8()?;
         let state_miss = cursor.read_i8()?;
-        
+
         Ok(Self {
             id,
             name_jp,
@@ -61,13 +61,13 @@ impl WeaponEffect {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
         let mut id = 0u32;
-        
+
         while cursor.position() as usize + Self::ENTRY_SIZE <= data.len() {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
             id += 1;
         }
-        
+
         Ok(entries)
     }
 
@@ -81,8 +81,14 @@ impl WeaponEffect {
     }
 
     /// Write all weapon effect entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
+    pub fn write_all_data<W: BinaryWriter>(
+        entries: &[Self],
+        writer: &mut W,
+        version: &GameVersion,
+    ) -> Result<()> {
+        for e in entries {
+            e.write_one(writer, version)?;
+        }
         Ok(())
     }
 }

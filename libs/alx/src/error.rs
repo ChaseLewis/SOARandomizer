@@ -57,4 +57,3 @@ impl From<gc_fst::OperateISOError> for Error {
         Error::IsoOperationError(format!("{:?}", e))
     }
 }
-

@@ -1,11 +1,11 @@
 //! Spirit curve entry type (SP/MAXSP per level for each character).
 
-use std::io::Cursor;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 
 use crate::error::Result;
-use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
+use crate::game::region::GameVersion;
 use crate::io::{BinaryReader, BinaryWriter};
 
 /// SP and MAXSP at a given level.
@@ -36,13 +36,13 @@ impl SpiritCurve {
     /// Read a single spirit curve from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, _version: &GameVersion) -> Result<Self> {
         let mut levels = Vec::with_capacity(99);
-        
+
         for _ in 0..99 {
             let sp = cursor.read_i8()?;
             let max_sp = cursor.read_i8()?;
             levels.push(SpiritLevel { sp, max_sp });
         }
-        
+
         // Get character name from ID
         let character_name = match id {
             0 => "Vyse",
@@ -52,8 +52,9 @@ impl SpiritCurve {
             4 => "Enrique",
             5 => "Gilder",
             _ => "???",
-        }.to_string();
-        
+        }
+        .to_string();
+
         Ok(Self {
             id,
             character_name,
@@ -65,9 +66,9 @@ impl SpiritCurve {
     pub fn read_all_data(data: &[u8], version: &GameVersion) -> Result<Vec<Self>> {
         let mut entries = Vec::new();
         let mut cursor = Cursor::new(data);
-        
+
         let id_range = id_ranges::SPIRIT_CURVE;
-        
+
         for id in id_range {
             if cursor.position() as usize + Self::ENTRY_SIZE > data.len() {
                 break;
@@ -75,7 +76,7 @@ impl SpiritCurve {
             let entry = Self::read_one(&mut cursor, id, version)?;
             entries.push(entry);
         }
-        
+
         Ok(entries)
     }
 
@@ -122,4 +123,3 @@ mod tests {
         assert_eq!(SpiritCurve::ENTRY_SIZE, 198);
     }
 }
-
