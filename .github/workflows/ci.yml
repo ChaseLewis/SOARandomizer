@@ -18,7 +18,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: dtolnay/rust-action@stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Run cargo check
         run: cargo check --workspace --all-targets
@@ -35,7 +35,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: dtolnay/rust-action@stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Run tests
         run: cargo test --workspace --exclude skies-randomizer
@@ -46,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-action@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
@@ -61,7 +61,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: dtolnay/rust-action@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
 
@@ -80,7 +80,7 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: dtolnay/rust-action@stable
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Build alx_rs
         run: cargo build --release --bin alx_rs

@@ -46,7 +46,7 @@ jobs:
           submodules: recursive
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -141,7 +141,7 @@ jobs:
   #         submodules: recursive
   #
   #     - name: Install Rust toolchain
-  #       uses: dtolnay/rust-action@stable
+  #       uses: dtolnay/rust-toolchain@stable
   #
   #     - name: Publish alx library
   #       run: cargo publish -p alx
