@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["submodules/gc_fst", "libs/alx", "bin/alx_rs"]
+members = ["submodules/gc_fst", "libs/alx", "bin/alx_rs", "bin/randomizer/src-tauri"]
