@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_entry_size() {
-        assert_eq!(CharacterSuperMove::ENTRY_SIZE, 44);
+        assert_eq!(CharacterSuperMove::ENTRY_SIZE, 48);
     }
 
     #[test]
