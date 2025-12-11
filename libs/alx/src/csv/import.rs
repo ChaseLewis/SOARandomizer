@@ -8,7 +8,7 @@ use crate::entries::{
     Shop, TreasureChest, CrewMember, PlayableShip,
     ShipCannon, ShipAccessory, ShipItem, EnemyShip,
     EnemyMagic, EnemySuperMove, Swashbuckler, SpiritCurve, ExpBoost,
-    SpiritLevel, OccasionFlags,
+    ExpCurve, MagicExpCurve, SpiritLevel, OccasionFlags,
 };
 use crate::error::{Error, Result};
 
@@ -563,18 +563,18 @@ impl CsvImporter {
             let id: u16 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(shop) = shops.iter_mut().find(|s| s.id == id) {
-                // Read item IDs from consecutive columns 1-48
+                // CSV format: Entry ID, Pad 1, US SOT Pos, [US Descr Pos], [US Descr Size], US Descr Str, Item 1 ID, [Item 1 Name], ...
+                // Item IDs are at columns 6, 8, 10, ... (every other column starting from 6)
                 shop.item_ids.clear();
                 for i in 0..48 {
-                    let col = 1 + i;
+                    let col = 6 + i * 2; // Item 1 ID at column 6, Item 2 ID at column 8, etc.
                     if let Some(val) = record.get(col) {
                         shop.item_ids.push(parse_or_default(val));
                     } else {
                         shop.item_ids.push(-1);
                     }
                 }
-                // Skip desc pos/size, keep description
-                // Skip description - strings are read-only
+                // Skip desc pos/size, keep description (strings are read-only)
             }
         }
         
@@ -1030,6 +1030,82 @@ impl CsvImporter {
         }
         
         Ok(boosts)
+    }
+
+    /// Import EXP curves from CSV.
+    /// 
+    /// CSV columns: 0: Entry ID, 1: [PC Name], 2-100: EXP 1-99
+    pub fn import_exp_curves<R: Read>(reader: R, existing: &[ExpCurve]) -> Result<Vec<ExpCurve>> {
+        let mut rdr = csv::Reader::from_reader(reader);
+        let mut curves: Vec<ExpCurve> = existing.to_vec();
+        
+        for result in rdr.records() {
+            let record = result.map_err(|e| Error::ParseError { offset: 0, message: format!("CSV parse error: {}", e) })?;
+            
+            let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
+            
+            if let Some(curve) = curves.iter_mut().find(|c| c.id == id) {
+                // Skip [PC Name] at column 1
+                // Read EXP values from columns 2-100
+                for i in 0..99 {
+                    if let Some(val) = record.get(2 + i) {
+                        if i < curve.exp_values.len() {
+                            curve.exp_values[i] = parse_or_default(val);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(curves)
+    }
+
+    /// Import Magic EXP curves from CSV.
+    /// 
+    /// CSV columns: 0: Entry ID, 1: [PC Name], 
+    /// 2-7: Green EXP 1-6, 8-13: Red EXP 1-6, 14-19: Purple EXP 1-6,
+    /// 20-25: Blue EXP 1-6, 26-31: Yellow EXP 1-6, 32-37: Silver EXP 1-6
+    pub fn import_magic_exp_curves<R: Read>(reader: R, existing: &[MagicExpCurve]) -> Result<Vec<MagicExpCurve>> {
+        let mut rdr = csv::Reader::from_reader(reader);
+        let mut curves: Vec<MagicExpCurve> = existing.to_vec();
+        
+        for result in rdr.records() {
+            let record = result.map_err(|e| Error::ParseError { offset: 0, message: format!("CSV parse error: {}", e) })?;
+            
+            let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
+            
+            if let Some(curve) = curves.iter_mut().find(|c| c.id == id) {
+                // Skip [PC Name] at column 1
+                // Read element EXP values starting at column 2
+                let mut col = 2;
+                for i in 0..6 {
+                    curve.green_exp[i] = parse_or_default(record.get(col).unwrap_or("0"));
+                    col += 1;
+                }
+                for i in 0..6 {
+                    curve.red_exp[i] = parse_or_default(record.get(col).unwrap_or("0"));
+                    col += 1;
+                }
+                for i in 0..6 {
+                    curve.purple_exp[i] = parse_or_default(record.get(col).unwrap_or("0"));
+                    col += 1;
+                }
+                for i in 0..6 {
+                    curve.blue_exp[i] = parse_or_default(record.get(col).unwrap_or("0"));
+                    col += 1;
+                }
+                for i in 0..6 {
+                    curve.yellow_exp[i] = parse_or_default(record.get(col).unwrap_or("0"));
+                    col += 1;
+                }
+                for i in 0..6 {
+                    curve.silver_exp[i] = parse_or_default(record.get(col).unwrap_or("0"));
+                    col += 1;
+                }
+            }
+        }
+        
+        Ok(curves)
     }
 }
 

@@ -4,7 +4,7 @@ use std::path::Path;
 
 use super::offsets::Offsets;
 use super::region::GameVersion;
-use crate::entries::{Accessory, Armor, Weapon, WeaponEffect, UsableItem, SpecialItem, Character, CharacterMagic, CharacterSuperMove, CrewMember, PlayableShip, ShipCannon, ShipAccessory, ShipItem, EnemyShip, EnemyMagic, EnemySuperMove, Enemy, EnemyTask, Swashbuckler, SpiritCurve, ExpBoost, Shop, TreasureChest};
+use crate::entries::{Accessory, Armor, Weapon, WeaponEffect, UsableItem, SpecialItem, Character, CharacterMagic, CharacterSuperMove, CrewMember, PlayableShip, ShipCannon, ShipAccessory, ShipItem, EnemyShip, EnemyMagic, EnemySuperMove, Enemy, EnemyTask, Swashbuckler, SpiritCurve, ExpBoost, ExpCurve, MagicExpCurve, Shop, TreasureChest};
 use crate::io::{parse_enp, parse_evp, parse_dat_file, decompress_aklz};
 use crate::items::ItemDatabase;
 use crate::error::{Error, Result};
@@ -17,6 +17,8 @@ pub struct GameRoot {
     offsets: Offsets,
     /// Cached Start.dol data
     dol_data: Option<Vec<u8>>,
+    /// Cached level file data (for EXP curves)
+    level_data: Option<Vec<u8>>,
 }
 
 impl GameRoot {
@@ -39,6 +41,7 @@ impl GameRoot {
             version,
             offsets,
             dol_data: None,
+            level_data: None,
         })
     }
 
@@ -133,6 +136,70 @@ impl GameRoot {
         if let Some(ref dol_data) = self.dol_data {
             let dol_path = Path::new("Start.dol");
             self.iso.write_file(dol_path, dol_data)?;
+        }
+        Ok(())
+    }
+
+    /// Load the level file (contains EXP curves) into memory.
+    /// This is cached for subsequent reads.
+    pub fn load_level_file(&mut self) -> Result<&[u8]> {
+        if self.level_data.is_none() {
+            let level_path = Path::new(self.offsets.level_file);
+            let data = self.iso.read_file(level_path)?;
+            self.level_data = Some(data);
+        }
+        Ok(self.level_data.as_ref().unwrap())
+    }
+
+    /// Get a slice of the level file data at the given range.
+    pub fn level_slice(&mut self, range: std::ops::Range<usize>) -> Result<&[u8]> {
+        let level = self.load_level_file()?;
+        if range.end > level.len() {
+            return Err(Error::ParseError {
+                offset: range.start,
+                message: format!(
+                    "Range {:x}..{:x} exceeds level file size {:x}",
+                    range.start, range.end, level.len()
+                ),
+            });
+        }
+        Ok(&level[range])
+    }
+
+    /// Load the level file data mutably (for writing).
+    fn load_level_mut(&mut self) -> Result<&mut Vec<u8>> {
+        if self.level_data.is_none() {
+            let level_path = Path::new(self.offsets.level_file);
+            let data = self.iso.read_file(level_path)?;
+            self.level_data = Some(data);
+        }
+        Ok(self.level_data.as_mut().unwrap())
+    }
+
+    /// Write bytes to a range in the level file data.
+    pub fn write_to_level(&mut self, range: std::ops::Range<usize>, data: &[u8]) -> Result<()> {
+        let level = self.load_level_mut()?;
+        if range.end > level.len() {
+            return Err(Error::ParseError {
+                offset: range.start,
+                message: format!("Range {:x}..{:x} exceeds level file size {:x}", range.start, range.end, level.len()),
+            });
+        }
+        if range.len() != data.len() {
+            return Err(Error::ValidationError(format!(
+                "Data length {} does not match range length {}",
+                data.len(), range.len()
+            )));
+        }
+        level[range].copy_from_slice(data);
+        Ok(())
+    }
+
+    /// Save the modified level file back to the ISO.
+    pub fn save_level(&mut self) -> Result<()> {
+        if let Some(ref level_data) = self.level_data {
+            let level_path = Path::new(self.offsets.level_file);
+            self.iso.write_file(level_path, level_data)?;
         }
         Ok(())
     }
@@ -332,6 +399,24 @@ impl GameRoot {
         } else {
             Ok(())
         }
+    }
+
+    /// Write EXP curves to the level file (patch approach).
+    pub fn write_exp_curves(&mut self, curves: &[ExpCurve]) -> Result<()> {
+        let data_range = self.offsets.exp_curve_data.clone();
+        let level = self.level_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("Level file not loaded".into()))?;
+        let mut buffer = level[data_range.clone()].to_vec();
+        ExpCurve::patch_all(curves, &mut buffer);
+        self.write_to_level(data_range, &buffer)
+    }
+
+    /// Write Magic EXP curves to the level file (patch approach).
+    pub fn write_magic_exp_curves(&mut self, curves: &[MagicExpCurve]) -> Result<()> {
+        let data_range = self.offsets.magic_exp_curve_data.clone();
+        let level = self.level_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("Level file not loaded".into()))?;
+        let mut buffer = level[data_range.clone()].to_vec();
+        MagicExpCurve::patch_all(curves, &mut buffer);
+        self.write_to_level(data_range, &buffer)
     }
 
     // ========================================================================
@@ -744,6 +829,20 @@ impl GameRoot {
         } else {
             Ok(Vec::new())
         }
+    }
+
+    /// Read all EXP curves from the level file.
+    pub fn read_exp_curves(&mut self) -> Result<Vec<ExpCurve>> {
+        let data_range = self.offsets.exp_curve_data.clone();
+        let data = self.level_slice(data_range)?.to_vec();
+        ExpCurve::read_all_data(&data, &self.version)
+    }
+
+    /// Read all Magic EXP curves from the level file.
+    pub fn read_magic_exp_curves(&mut self) -> Result<Vec<MagicExpCurve>> {
+        let data_range = self.offsets.magic_exp_curve_data.clone();
+        let data = self.level_slice(data_range)?.to_vec();
+        MagicExpCurve::read_all_data(&data, &self.version)
     }
 
     /// Read all enemies from ENP, EVP, and DAT files in the ISO.

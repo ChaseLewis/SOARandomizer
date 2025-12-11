@@ -25,6 +25,8 @@ mod enemy_super_move;
 mod swashbuckler;
 mod spirit_curve;
 mod exp_boost;
+mod exp_curve;
+mod magic_exp_curve;
 mod shop;
 mod treasure_chest;
 
@@ -51,6 +53,8 @@ pub use enemy_super_move::{EnemySuperMove, EnemySkillCategory};
 pub use swashbuckler::Swashbuckler;
 pub use spirit_curve::{SpiritCurve, SpiritLevel};
 pub use exp_boost::ExpBoost;
+pub use exp_curve::ExpCurve;
+pub use magic_exp_curve::MagicExpCurve;
 pub use shop::Shop;
 pub use treasure_chest::TreasureChest;
 

@@ -8,7 +8,7 @@ use crate::entries::{
     Shop, TreasureChest, CrewMember, PlayableShip,
     ShipCannon, ShipAccessory, ShipItem, EnemyShip,
     EnemyMagic, EnemySuperMove, Swashbuckler, SpiritCurve, ExpBoost,
-    Enemy, EnemyTask,
+    ExpCurve, MagicExpCurve, Enemy, EnemyTask,
 };
 use crate::lookups::{ELEMENT_NAMES, EFFECT_NAMES, SCOPE_NAMES, STATE_NAMES, SHIP_OCCASION_NAMES};
 use crate::items::ItemDatabase;
@@ -635,33 +635,45 @@ impl CsvExporter {
         Ok(())
     }
 
-    /// Export shops to CSV format.
-    pub fn export_shops<W: Write>(shops: &[Shop], writer: W) -> Result<()> {
+    /// Export shops to CSV format matching original ALX output.
+    /// 
+    /// The `item_db` is used to look up item names for each shop slot.
+    pub fn export_shops<W: Write>(shops: &[Shop], writer: W, item_db: &ItemDatabase) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
         
-        // Build header with item slots
-        let mut header = vec!["Entry ID".to_string()];
+        // Build header: Entry ID, Pad 1, US SOT Pos, [US Descr Pos], [US Descr Size], US Descr Str, Item 1 ID, [Item 1 Name], ...
+        let mut header = vec![
+            "Entry ID".to_string(),
+            "Pad 1".to_string(),
+            "US SOT Pos".to_string(),
+            "[US Descr Pos]".to_string(),
+            "[US Descr Size]".to_string(),
+            "US Descr Str".to_string(),
+        ];
         for i in 1..=48 {
             header.push(format!("Item {} ID", i));
+            header.push(format!("[Item {} Name]", i));
         }
-        header.push("[US Descr Pos]".to_string());
-        header.push("[US Descr Size]".to_string());
-        header.push("US Descr Str".to_string());
         
         wtr.write_record(&header)?;
         
         for shop in shops {
-            let mut row = vec![shop.id.to_string()];
-            for id in &shop.item_ids {
-                row.push(id.to_string());
+            let mut row = vec![
+                shop.id.to_string(),
+                "0".to_string(), // Pad 1
+                format!("0x{:08x}", shop.sot_pos),
+                format!("0x{:x}", shop.description_pos),
+                shop.description_size.to_string(),
+                shop.description.clone(),
+            ];
+            
+            // Add 48 item slots with names
+            for i in 0..48 {
+                let item_id = shop.item_ids.get(i).copied().unwrap_or(-1);
+                row.push(item_id.to_string());
+                row.push(item_db.name_or_default(item_id as i32));
             }
-            // Pad to 48 items if needed
-            while row.len() < 49 {
-                row.push("-1".to_string());
-            }
-            row.push(format!("0x{:x}", shop.description_pos));
-            row.push(shop.description_size.to_string());
-            row.push(shop.description.clone());
+            
             wtr.write_record(&row)?;
         }
         
@@ -1367,6 +1379,74 @@ impl CsvExporter {
                 t.task_id.to_string(),
                 t.param_id.to_string(),
             ])?;
+        }
+        
+        wtr.flush()?;
+        Ok(())
+    }
+
+    /// Export EXP curves to CSV format matching original ALX output.
+    pub fn export_exp_curves<W: Write>(curves: &[ExpCurve], writer: W) -> Result<()> {
+        let mut wtr = csv::Writer::from_writer(writer);
+        
+        // Build header: Entry ID, [PC Name], EXP 1-99
+        let mut header = vec!["Entry ID".to_string(), "[PC Name]".to_string()];
+        for i in 1..=99 {
+            header.push(format!("EXP {}", i));
+        }
+        wtr.write_record(&header)?;
+        
+        for curve in curves {
+            let mut row = vec![curve.id.to_string(), curve.character_name.clone()];
+            for &exp in curve.exp_values.iter().take(99) {
+                row.push(exp.to_string());
+            }
+            // Pad to 99 values if needed
+            while row.len() < 101 {
+                row.push("0".to_string());
+            }
+            wtr.write_record(&row)?;
+        }
+        
+        wtr.flush()?;
+        Ok(())
+    }
+
+    /// Export Magic EXP curves to CSV format matching original ALX output.
+    pub fn export_magic_exp_curves<W: Write>(curves: &[MagicExpCurve], writer: W) -> Result<()> {
+        let mut wtr = csv::Writer::from_writer(writer);
+        
+        // Build header: Entry ID, [PC Name], then 6 levels for each of 6 elements
+        let mut header = vec!["Entry ID".to_string(), "[PC Name]".to_string()];
+        let elements = ["Green", "Red", "Purple", "Blue", "Yellow", "Silver"];
+        for element in &elements {
+            for level in 1..=6 {
+                header.push(format!("{} EXP {}", element, level));
+            }
+        }
+        wtr.write_record(&header)?;
+        
+        for curve in curves {
+            let mut row = vec![curve.id.to_string(), curve.character_name.clone()];
+            for &exp in &curve.green_exp {
+                row.push(exp.to_string());
+            }
+            for &exp in &curve.red_exp {
+                row.push(exp.to_string());
+            }
+            for &exp in &curve.purple_exp {
+                row.push(exp.to_string());
+            }
+            for &exp in &curve.blue_exp {
+                row.push(exp.to_string());
+            }
+            for &exp in &curve.yellow_exp {
+                row.push(exp.to_string());
+            }
+            for &exp in &curve.silver_exp {
+                row.push(exp.to_string());
+            }
+            wtr.write_record(&row)?;
         }
         
         wtr.flush()?;

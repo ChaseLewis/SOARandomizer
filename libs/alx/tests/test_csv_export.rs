@@ -907,9 +907,10 @@ fn test_csv_exporter_shop_row_count() {
     
     let mut game = common::load_game();
     let shops = game.read_shops().unwrap();
+    let item_db = game.build_item_database().unwrap();
     
     let mut buffer = Vec::new();
-    CsvExporter::export_shops(&shops, &mut buffer).unwrap();
+    CsvExporter::export_shops(&shops, &mut buffer, &item_db).unwrap();
     let generated = String::from_utf8(buffer).unwrap();
     
     compare_csv_output(&generated, "shop.csv")
@@ -1097,9 +1098,10 @@ fn test_shop_csv_deep_compare() {
     
     let mut game = common::load_game();
     let data = game.read_shops().unwrap();
+    let item_db = game.build_item_database().unwrap();
     
     let mut buffer = Vec::new();
-    CsvExporter::export_shops(&data, &mut buffer).unwrap();
+    CsvExporter::export_shops(&data, &mut buffer, &item_db).unwrap();
     let generated = String::from_utf8(buffer).unwrap();
     
     // Skip description columns - description reading has offset alignment issues

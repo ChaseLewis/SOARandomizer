@@ -187,10 +187,11 @@ fn run_import(iso_path: &Path, import_dir: &Path, output_iso: Option<&Path>, aut
     // Import all data types
     import_all(&mut game, import_dir)?;
     
-    // Save changes to DOL
+    // Save changes to ISO
     println!();
     println!("Saving changes to ISO...");
     game.save_dol()?;
+    game.save_level()?;
     
     println!("Import complete!");
     
@@ -477,6 +478,42 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
         game.write_exp_boosts(&data)?;
     }
     
+    // Import EXP curves (from level file)
+    {
+        let path = import_dir.join("expcurve.csv");
+        if path.exists() {
+            print!("Importing exp curves...");
+            // Need to load level file first
+            game.load_level_file()?;
+            let existing = game.read_exp_curves()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_exp_curves(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_exp_curves(&data)?;
+        } else {
+            println!("Skipping exp curves (file not found)");
+        }
+    }
+    
+    // Import Magic EXP curves (from level file)
+    {
+        let path = import_dir.join("magicexpcurve.csv");
+        if path.exists() {
+            print!("Importing magic exp curves...");
+            // Need to load level file first (may already be loaded)
+            game.load_level_file()?;
+            let existing = game.read_magic_exp_curves()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_magic_exp_curves(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_magic_exp_curves(&data)?;
+        } else {
+            println!("Skipping magic exp curves (file not found)");
+        }
+    }
+    
     // Note: Enemies from ENP/DAT files are not yet supported for import
     // (they require writing back to file-based storage, not just DOL)
     
@@ -498,10 +535,15 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
     export_csv!(game, output_dir, "characters", read_characters, export_characters, "character.csv");
     export_csv!(game, output_dir, "character magic", read_character_magic, export_character_magic, "charactermagic.csv");
     export_csv!(game, output_dir, "character super moves", read_character_super_moves, export_character_super_moves, "charactersupermove.csv");
-    export_csv!(game, output_dir, "shops", read_shops, export_shops, "shop.csv");
     
-    // Build item database early for lookups (treasure chests and enemies need it)
+    // Build item database early for lookups (shops, treasure chests, and enemies need it)
     let item_db = game.build_item_database()?;
+    
+    // Shops need item database for item name lookup
+    print!("Exporting shops...");
+    let shops = game.read_shops()?;
+    CsvExporter::export_shops(&shops, File::create(output_dir.join("shop.csv"))?, &item_db)?;
+    println!(" {} entries", shops.len());
     
     // Treasure chests need item database for item name lookup
     print!("Exporting treasure chests...");
@@ -520,6 +562,8 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
     export_csv!(game, output_dir, "swashbucklers", read_swashbucklers, export_swashbucklers, "swashbuckler.csv");
     export_csv!(game, output_dir, "spirit curves", read_spirit_curves, export_spirit_curves, "spiritcurve.csv");
     export_csv!(game, output_dir, "exp boosts", read_exp_boosts, export_exp_boosts, "expboost.csv");
+    export_csv!(game, output_dir, "exp curves", read_exp_curves, export_exp_curves, "expcurve.csv");
+    export_csv!(game, output_dir, "magic exp curves", read_magic_exp_curves, export_magic_exp_curves, "magicexpcurve.csv");
     
     // Enemies (from ENP files) - special handling for two outputs
     print!("Exporting enemies...");

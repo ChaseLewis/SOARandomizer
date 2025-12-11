@@ -100,6 +100,13 @@ pub struct Offsets {
     
     /// EXP boost data range in Start.dol (GC only)
     pub exp_boost_data: Option<Range<usize>>,
+    
+    /// Level data file path (for EXP curves)
+    pub level_file: &'static str,
+    /// EXP curve data range within level file
+    pub exp_curve_data: Range<usize>,
+    /// Magic EXP curve data range within level file
+    pub magic_exp_curve_data: Range<usize>,
 }
 
 impl Offsets {
@@ -158,6 +165,11 @@ impl Offsets {
             treasure_chest_data: 0x2d29e8..0x2d2da0,
             spirit_curve_data: 0x2c6184..0x2c6628,
             exp_boost_data: Some(0x2d1638..0x2d168c),
+            
+            // Level file (contains EXP curves)
+            level_file: "battle/first.lmt",
+            exp_curve_data: 0x0..0x948,
+            magic_exp_curve_data: 0x948..0xaf8,
         }
     }
 
@@ -207,6 +219,11 @@ impl Offsets {
             treasure_chest_data: 0x2d26d0..0x2d2a88,
             spirit_curve_data: 0x2c567c..0x2c5b20,
             exp_boost_data: Some(0x2d1614..0x2d1668),
+            
+            // Level file (contains EXP curves)
+            level_file: "battle/first.lmt",
+            exp_curve_data: 0x0..0x948,
+            magic_exp_curve_data: 0x948..0xaf8,
         }
     }
 
@@ -256,6 +273,11 @@ impl Offsets {
             treasure_chest_data: 0x2d1610..0x2d19c8,
             spirit_curve_data: 0x2c4aa0..0x2c4f44,
             exp_boost_data: Some(0x2cffd0..0x2d0024),
+            
+            // Level file (contains EXP curves)
+            level_file: "battle/first.lmt",
+            exp_curve_data: 0x0..0x948,
+            magic_exp_curve_data: 0x948..0xaf8,
         }
     }
 }
