@@ -68,7 +68,7 @@ jobs:
           components: clippy
 
       - name: Run clippy
-        run: cargo clippy -p alx -p alx_rs -- -D warnings
+        run: cargo clippy -p alx -p alx_rs --no-deps -- -D warnings
 
   build:
     name: Build
