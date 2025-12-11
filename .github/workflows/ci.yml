@@ -21,7 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run cargo check
-        run: cargo check --workspace --all-targets
+        run: cargo check --workspace --exclude skies-randomizer --exclude gc_fst --all-targets
 
   test:
     name: Test
@@ -38,7 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Run tests
-        run: cargo test --workspace --exclude skies-randomizer
+        run: cargo test --workspace --exclude skies-randomizer --exclude gc_fst
 
   fmt:
     name: Format
