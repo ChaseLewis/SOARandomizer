@@ -6,6 +6,17 @@ A Rust toolkit for reading and modifying **Skies of Arcadia Legends** (GameCube)
 
 This project provides tools to extract game data from a GameCube ISO, export it to editable CSV files, and import modified data back into the ISO. It's designed as the foundation for a future randomizer.
 
+We will create a UI to make this easier to work with at some point but this is a CLI manual tool currently. Still very new so I recommend writing to a copy of your ISO in case of corruption. Feel free to report anything. I have done a lot of automated testing so far to make sure things are good, but entirely possible stuff got missed at this early stage.
+
+## Caveats
+- We are focusing on the USA version currently. The base tool we are basing this on has the capabilities to work with any Gamecube version.
+
+- This does not allow code level tweaks. This means things like damage multipliers, treasure chest drops, ship weapon values, etc are all possible to be edited.
+
+- We currently don't export the encounter tables and make them editable. That would be nice and give it a more 'randomizer' vibe if we could hotswap out bosses for versions tuned to the appropriate level. So you could edit an existing bosses strength, but not switch what models spawn where.
+
+- Effects are mapped by an integer to a specified effect in a table. So changing what certain things do is limited to the effects currently in game. Though magic numbers themselves can be tuned.
+
 ## Components
 
 ```
