@@ -198,6 +198,7 @@ fn run_import(iso_path: &Path, import_dir: &Path, output_iso: Option<&Path>, aut
 }
 
 /// Import a CSV file if it exists, returning the parsed data.
+/// This version doesn't need existing data (for types where CSV has all fields).
 macro_rules! import_csv {
     ($import_dir:expr, $filename:expr, $import_fn:ident, $type_name:expr) => {{
         let path = $import_dir.join($filename);
@@ -223,6 +224,7 @@ macro_rules! import_csv {
     }};
 }
 
+
 fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     // Import accessories
     if let Some(data) = import_csv!(import_dir, "accessory.csv", import_accessories, "accessories") {
@@ -239,9 +241,20 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
         game.write_weapons(&data)?;
     }
     
-    // Import usable items
-    if let Some(data) = import_csv!(import_dir, "usableitem.csv", import_usable_items, "usable items") {
-        game.write_usable_items(&data)?;
+    // Import usable items (merge with existing)
+    {
+        let path = import_dir.join("usableitem.csv");
+        if path.exists() {
+            print!("Importing usable items...");
+            let existing = game.read_usable_items()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_usable_items(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_usable_items(&data)?;
+        } else {
+            println!("Skipping usable items (file not found)");
+        }
     }
     
     // Import special items
@@ -249,24 +262,68 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
         game.write_special_items(&data)?;
     }
     
-    // Import characters
-    if let Some(data) = import_csv!(import_dir, "character.csv", import_characters, "characters") {
-        game.write_characters(&data)?;
+    // Import characters (merge with existing - CSV only has subset of fields)
+    {
+        let path = import_dir.join("character.csv");
+        if path.exists() {
+            print!("Importing characters...");
+            let existing = game.read_characters()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_characters(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_characters(&data)?;
+        } else {
+            println!("Skipping characters (file not found)");
+        }
     }
     
-    // Import character magic
-    if let Some(data) = import_csv!(import_dir, "charactermagic.csv", import_character_magic, "character magic") {
-        game.write_character_magic(&data)?;
+    // Import character magic (merge with existing)
+    {
+        let path = import_dir.join("charactermagic.csv");
+        if path.exists() {
+            print!("Importing character magic...");
+            let existing = game.read_character_magic()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_character_magic(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_character_magic(&data)?;
+        } else {
+            println!("Skipping character magic (file not found)");
+        }
     }
     
-    // Import character super moves
-    if let Some(data) = import_csv!(import_dir, "charactersupermove.csv", import_character_super_moves, "character super moves") {
-        game.write_character_super_moves(&data)?;
+    // Import character super moves (merge with existing)
+    {
+        let path = import_dir.join("charactersupermove.csv");
+        if path.exists() {
+            print!("Importing character super moves...");
+            let existing = game.read_character_super_moves()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_character_super_moves(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_character_super_moves(&data)?;
+        } else {
+            println!("Skipping character super moves (file not found)");
+        }
     }
     
-    // Import shops
-    if let Some(data) = import_csv!(import_dir, "shop.csv", import_shops, "shops") {
-        game.write_shops(&data)?;
+    // Import shops (merge with existing)
+    {
+        let path = import_dir.join("shop.csv");
+        if path.exists() {
+            print!("Importing shops...");
+            let existing = game.read_shops()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_shops(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_shops(&data)?;
+        } else {
+            println!("Skipping shops (file not found)");
+        }
     }
     
     // Import treasure chests
@@ -274,44 +331,132 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
         game.write_treasure_chests(&data)?;
     }
     
-    // Import crew members
-    if let Some(data) = import_csv!(import_dir, "crewmember.csv", import_crew_members, "crew members") {
-        game.write_crew_members(&data)?;
+    // Import crew members (merge with existing)
+    {
+        let path = import_dir.join("crewmember.csv");
+        if path.exists() {
+            print!("Importing crew members...");
+            let existing = game.read_crew_members()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_crew_members(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_crew_members(&data)?;
+        } else {
+            println!("Skipping crew members (file not found)");
+        }
     }
     
-    // Import playable ships
-    if let Some(data) = import_csv!(import_dir, "playableship.csv", import_playable_ships, "playable ships") {
-        game.write_playable_ships(&data)?;
+    // Import playable ships (merge with existing)
+    {
+        let path = import_dir.join("playableship.csv");
+        if path.exists() {
+            print!("Importing playable ships...");
+            let existing = game.read_playable_ships()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_playable_ships(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_playable_ships(&data)?;
+        } else {
+            println!("Skipping playable ships (file not found)");
+        }
     }
     
-    // Import ship cannons
-    if let Some(data) = import_csv!(import_dir, "shipcannon.csv", import_ship_cannons, "ship cannons") {
-        game.write_ship_cannons(&data)?;
+    // Import ship cannons (merge with existing)
+    {
+        let path = import_dir.join("shipcannon.csv");
+        if path.exists() {
+            print!("Importing ship cannons...");
+            let existing = game.read_ship_cannons()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_ship_cannons(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_ship_cannons(&data)?;
+        } else {
+            println!("Skipping ship cannons (file not found)");
+        }
     }
     
-    // Import ship accessories
-    if let Some(data) = import_csv!(import_dir, "shipaccessory.csv", import_ship_accessories, "ship accessories") {
-        game.write_ship_accessories(&data)?;
+    // Import ship accessories (merge with existing)
+    {
+        let path = import_dir.join("shipaccessory.csv");
+        if path.exists() {
+            print!("Importing ship accessories...");
+            let existing = game.read_ship_accessories()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_ship_accessories(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_ship_accessories(&data)?;
+        } else {
+            println!("Skipping ship accessories (file not found)");
+        }
     }
     
-    // Import ship items
-    if let Some(data) = import_csv!(import_dir, "shipitem.csv", import_ship_items, "ship items") {
-        game.write_ship_items(&data)?;
+    // Import ship items (merge with existing)
+    {
+        let path = import_dir.join("shipitem.csv");
+        if path.exists() {
+            print!("Importing ship items...");
+            let existing = game.read_ship_items()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_ship_items(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_ship_items(&data)?;
+        } else {
+            println!("Skipping ship items (file not found)");
+        }
     }
     
-    // Import enemy ships
-    if let Some(data) = import_csv!(import_dir, "enemyship.csv", import_enemy_ships, "enemy ships") {
-        game.write_enemy_ships(&data)?;
+    // Import enemy ships (merge with existing)
+    {
+        let path = import_dir.join("enemyship.csv");
+        if path.exists() {
+            print!("Importing enemy ships...");
+            let existing = game.read_enemy_ships()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_enemy_ships(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_enemy_ships(&data)?;
+        } else {
+            println!("Skipping enemy ships (file not found)");
+        }
     }
     
-    // Import enemy magic
-    if let Some(data) = import_csv!(import_dir, "enemymagic.csv", import_enemy_magic, "enemy magic") {
-        game.write_enemy_magic(&data)?;
+    // Import enemy magic (merge with existing)
+    {
+        let path = import_dir.join("enemymagic.csv");
+        if path.exists() {
+            print!("Importing enemy magic...");
+            let existing = game.read_enemy_magic()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_enemy_magic(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_enemy_magic(&data)?;
+        } else {
+            println!("Skipping enemy magic (file not found)");
+        }
     }
     
-    // Import enemy super moves
-    if let Some(data) = import_csv!(import_dir, "enemysupermove.csv", import_enemy_super_moves, "enemy super moves") {
-        game.write_enemy_super_moves(&data)?;
+    // Import enemy super moves (merge with existing)
+    {
+        let path = import_dir.join("enemysupermove.csv");
+        if path.exists() {
+            print!("Importing enemy super moves...");
+            let existing = game.read_enemy_super_moves()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_enemy_super_moves(reader, &existing)?;
+            println!(" {} entries", data.len());
+            game.write_enemy_super_moves(&data)?;
+        } else {
+            println!("Skipping enemy super moves (file not found)");
+        }
     }
     
     // Import swashbucklers
