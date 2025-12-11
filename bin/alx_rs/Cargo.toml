@@ -3,6 +3,11 @@ name = "alx_rs"
 version = "0.1.0"
 edition = "2021"
 description = "CLI tool to extract and export Skies of Arcadia game data to CSV"
+license = "MIT"
+repository = "https://github.com/yourusername/SOARandomizer"
+readme = "README.md"
+keywords = ["skies-of-arcadia", "game-data", "csv", "gamecube"]
+categories = ["command-line-utilities", "game-development"]
 
 [dependencies]
 alx = { path = "../../libs/alx" }
