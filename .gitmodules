@@ -1,0 +1,6 @@
+[submodule "submodules/alx"]
+	path = submodules/alx
+	url = https://github.com/Taikocuya/ALX.git
+[submodule "submodules/gc_fst"]
+	path = submodules/gc_fst
+	url = https://github.com/AlexanderHarrison/gc_fst.git

@@ -1,0 +1,14 @@
+[package]
+name = "alx_rs"
+version = "0.1.0"
+edition = "2021"
+description = "CLI tool to extract and export Skies of Arcadia game data to CSV"
+
+[dependencies]
+alx = { path = "../../libs/alx" }
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+csv = "1.4"
+tempfile = "3"
+
