@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Playable character entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -129,6 +129,44 @@ impl Character {
     /// Size of one character entry in bytes.
     /// Based on Ruby: 11 + many fields = ~152 bytes
     pub const ENTRY_SIZE: usize = 152;
+    
+    // Field offsets within entry (name at 0-10 is NEVER written)
+    const OFF_AGE: usize = 11;
+    const OFF_GENDER_ID: usize = 12;
+    const OFF_WIDTH: usize = 13;
+    const OFF_DEPTH: usize = 14;
+    const OFF_MAX_MP: usize = 15;
+    const OFF_ELEMENT_ID: usize = 16;
+    // 17 = pad1
+    const OFF_WEAPON_ID: usize = 18;
+    const OFF_ARMOR_ID: usize = 20;
+    const OFF_ACCESSORY_ID: usize = 22;
+    const OFF_MOVEMENT_FLAGS: usize = 24;
+    const OFF_HP: usize = 26;
+    const OFF_MAX_HP: usize = 28;
+    const OFF_MAX_HP_GROWTH: usize = 30;
+    const OFF_SP: usize = 32;
+    const OFF_MAX_SP: usize = 34;
+    const OFF_COUNTER_PERCENT: usize = 36;
+    // 38 = pad2
+    const OFF_EXP: usize = 40;
+    const OFF_MAX_MP_GROWTH: usize = 44;
+    const OFF_UNKNOWN1: usize = 48;
+    const OFF_ELEMENT_RESISTANCES: usize = 52;
+    const OFF_STATE_RESISTANCES: usize = 64;
+    const OFF_DANGER: usize = 94;
+    const OFF_POWER: usize = 96;
+    const OFF_WILL: usize = 98;
+    const OFF_VIGOR: usize = 100;
+    const OFF_AGILE: usize = 102;
+    const OFF_QUICK: usize = 104;
+    // 106 = pad3
+    const OFF_POWER_GROWTH: usize = 108;
+    const OFF_WILL_GROWTH: usize = 112;
+    const OFF_VIGOR_GROWTH: usize = 116;
+    const OFF_AGILE_GROWTH: usize = 120;
+    const OFF_QUICK_GROWTH: usize = 124;
+    const OFF_MAGIC_EXP: usize = 128;
 
     /// Get gender name.
     pub fn gender_name(&self) -> &'static str {
@@ -255,65 +293,76 @@ impl Character {
         Ok(characters)
     }
 
-    /// Write a single character entry to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, _version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 11)?;
-        writer.write_i8(self.age)?;
-        writer.write_i8(self.gender_id)?;
-        writer.write_i8(self.width)?;
-        writer.write_i8(self.depth)?;
-        writer.write_i8(self.max_mp)?;
-        writer.write_i8(self.element_id)?;
-        writer.write_u8(0)?; // pad1
-        writer.write_u16_be(self.weapon_id)?;
-        writer.write_u16_be(self.armor_id)?;
-        writer.write_u16_be(self.accessory_id)?;
-        writer.write_i16_be(self.movement_flags)?;
-        writer.write_i16_be(self.hp)?;
-        writer.write_i16_be(self.max_hp)?;
-        writer.write_i16_be(self.max_hp_growth)?;
-        writer.write_i16_be(self.sp)?;
-        writer.write_i16_be(self.max_sp)?;
-        writer.write_i16_be(self.counter_percent)?;
-        writer.write_i16_be(0)?; // pad2
-        writer.write_u32_be(self.exp)?;
-        writer.write_f32_be(self.max_mp_growth)?;
-        writer.write_f32_be(self.unknown1)?;
+    /// Patch a single character entry in a mutable buffer.
+    /// Only writes numeric fields at their exact offsets - strings and padding are untouched.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        // Helper to write BE values at offset
+        fn put_i8(buf: &mut [u8], off: usize, v: i8) { buf[off] = v as u8; }
+        fn put_u16(buf: &mut [u8], off: usize, v: u16) { buf[off..off+2].copy_from_slice(&v.to_be_bytes()); }
+        fn put_i16(buf: &mut [u8], off: usize, v: i16) { buf[off..off+2].copy_from_slice(&v.to_be_bytes()); }
+        fn put_u32(buf: &mut [u8], off: usize, v: u32) { buf[off..off+4].copy_from_slice(&v.to_be_bytes()); }
+        fn put_i32(buf: &mut [u8], off: usize, v: i32) { buf[off..off+4].copy_from_slice(&v.to_be_bytes()); }
+        fn put_f32(buf: &mut [u8], off: usize, v: f32) { buf[off..off+4].copy_from_slice(&v.to_be_bytes()); }
         
-        for &res in &self.element_resistances {
-            writer.write_i16_be(res)?;
+        // Write only numeric fields (skip name at 0-10, skip padding bytes)
+        put_i8(buf, Self::OFF_AGE, self.age);
+        put_i8(buf, Self::OFF_GENDER_ID, self.gender_id);
+        put_i8(buf, Self::OFF_WIDTH, self.width);
+        put_i8(buf, Self::OFF_DEPTH, self.depth);
+        put_i8(buf, Self::OFF_MAX_MP, self.max_mp);
+        put_i8(buf, Self::OFF_ELEMENT_ID, self.element_id);
+        put_u16(buf, Self::OFF_WEAPON_ID, self.weapon_id);
+        put_u16(buf, Self::OFF_ARMOR_ID, self.armor_id);
+        put_u16(buf, Self::OFF_ACCESSORY_ID, self.accessory_id);
+        put_i16(buf, Self::OFF_MOVEMENT_FLAGS, self.movement_flags);
+        put_i16(buf, Self::OFF_HP, self.hp);
+        put_i16(buf, Self::OFF_MAX_HP, self.max_hp);
+        put_i16(buf, Self::OFF_MAX_HP_GROWTH, self.max_hp_growth);
+        put_i16(buf, Self::OFF_SP, self.sp);
+        put_i16(buf, Self::OFF_MAX_SP, self.max_sp);
+        put_i16(buf, Self::OFF_COUNTER_PERCENT, self.counter_percent);
+        put_u32(buf, Self::OFF_EXP, self.exp);
+        put_f32(buf, Self::OFF_MAX_MP_GROWTH, self.max_mp_growth);
+        put_f32(buf, Self::OFF_UNKNOWN1, self.unknown1);
+        
+        // Element resistances
+        for (i, &res) in self.element_resistances.iter().enumerate() {
+            put_i16(buf, Self::OFF_ELEMENT_RESISTANCES + i * 2, res);
         }
         
-        for &res in &self.state_resistances {
-            writer.write_i16_be(res)?;
+        // State resistances
+        for (i, &res) in self.state_resistances.iter().enumerate() {
+            put_i16(buf, Self::OFF_STATE_RESISTANCES + i * 2, res);
         }
         
-        writer.write_i16_be(self.danger)?;
-        writer.write_i16_be(self.power)?;
-        writer.write_i16_be(self.will)?;
-        writer.write_i16_be(self.vigor)?;
-        writer.write_i16_be(self.agile)?;
-        writer.write_i16_be(self.quick)?;
-        writer.write_i16_be(0)?; // pad3
+        put_i16(buf, Self::OFF_DANGER, self.danger);
+        put_i16(buf, Self::OFF_POWER, self.power);
+        put_i16(buf, Self::OFF_WILL, self.will);
+        put_i16(buf, Self::OFF_VIGOR, self.vigor);
+        put_i16(buf, Self::OFF_AGILE, self.agile);
+        put_i16(buf, Self::OFF_QUICK, self.quick);
         
-        writer.write_f32_be(self.power_growth)?;
-        writer.write_f32_be(self.will_growth)?;
-        writer.write_f32_be(self.vigor_growth)?;
-        writer.write_f32_be(self.agile_growth)?;
-        writer.write_f32_be(self.quick_growth)?;
+        put_f32(buf, Self::OFF_POWER_GROWTH, self.power_growth);
+        put_f32(buf, Self::OFF_WILL_GROWTH, self.will_growth);
+        put_f32(buf, Self::OFF_VIGOR_GROWTH, self.vigor_growth);
+        put_f32(buf, Self::OFF_AGILE_GROWTH, self.agile_growth);
+        put_f32(buf, Self::OFF_QUICK_GROWTH, self.quick_growth);
         
-        for &exp in &self.magic_exp {
-            writer.write_i32_be(exp)?;
+        // Magic EXP
+        for (i, &exp) in self.magic_exp.iter().enumerate() {
+            put_i32(buf, Self::OFF_MAGIC_EXP + i * 4, exp);
         }
-        
-        Ok(())
     }
 
-    /// Write all character entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(chars: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
+    /// Patch all character entries into a buffer.
+    /// Buffer must be the original DOL section data.
+    pub fn patch_all(chars: &[Self], buf: &mut [u8]) {
         for c in chars {
-            c.write_one(writer, version)?;
+            let start = c.id as usize * Self::ENTRY_SIZE;
+            let end = start + Self::ENTRY_SIZE;
+            if end <= buf.len() {
+                c.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }

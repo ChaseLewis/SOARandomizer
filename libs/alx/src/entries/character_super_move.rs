@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// A character super move (S-Move) in the game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,8 +64,32 @@ pub struct CharacterSuperMove {
 
 impl CharacterSuperMove {
     /// Size of one entry in bytes (JP/US).
-    /// 17 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 1 + 3 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 3 = 44 bytes
-    pub const ENTRY_SIZE: usize = 44;
+    /// Same structure as CharacterMagic = 48 bytes
+    pub const ENTRY_SIZE: usize = 48;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_ELEMENT_ID: usize = 17;
+    const OFF_ORDER: usize = 18;
+    const OFF_OCCASION: usize = 20;
+    const OFF_EFFECT_ID: usize = 21;
+    const OFF_SCOPE_ID: usize = 22;
+    const OFF_CATEGORY_ID: usize = 23;
+    const OFF_EFFECT_SPEED: usize = 24;
+    const OFF_EFFECT_SP: usize = 25;
+    // 26-27 = pad
+    const OFF_EFFECT_BASE: usize = 28;
+    const OFF_TYPE_ID: usize = 30;
+    const OFF_STATE_ID: usize = 31;
+    const OFF_STATE_MISS: usize = 32;
+    // 33-35 = pad
+    const OFF_SHIP_OCC_ID: usize = 36;
+    // 37 = pad
+    const OFF_SHIP_EFFECT_ID: usize = 38;
+    const OFF_SHIP_EFFECT_SP: usize = 40;
+    const OFF_SHIP_EFFECT_TURNS: usize = 41;
+    const OFF_SHIP_EFFECT_BASE: usize = 42;
+    const OFF_UNKNOWN: usize = 44;
+    // 45-47 = pad
 
     /// Read a single CharacterSuperMove from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
@@ -172,39 +196,39 @@ impl CharacterSuperMove {
         (self.occasion_flags & 0x01) != 0
     }
 
-    /// Write a single CharacterSuperMove to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_i8(self.element_id)?;
-        if version.region == Region::Eu { writer.write_u8(0)?; }
-        writer.write_i16_be(self.order)?;
-        writer.write_u8(self.occasion_flags)?;
-        writer.write_i8(self.effect_id)?;
-        writer.write_u8(self.scope_id)?;
-        writer.write_i8(self.category_id)?;
-        writer.write_i8(self.effect_speed)?;
-        writer.write_i8(self.effect_sp)?;
-        writer.write_u8(0)?; writer.write_u8(0)?;
-        writer.write_i16_be(self.effect_base)?;
-        writer.write_i8(self.type_id)?;
-        writer.write_i8(self.state_id)?;
-        writer.write_i8(self.state_miss)?;
-        writer.write_u8(0)?; writer.write_u8(0)?; writer.write_u8(0)?;
-        writer.write_i8(self.ship_occasion_id)?;
-        writer.write_u8(0)?;
-        writer.write_i16_be(self.ship_effect_id)?;
-        writer.write_i8(self.ship_effect_sp)?;
-        writer.write_i8(self.ship_effect_turns)?;
-        writer.write_i16_be(self.ship_effect_base)?;
-        writer.write_i8(self.unknown)?;
-        writer.write_u8(0)?; writer.write_u8(0)?; writer.write_u8(0)?;
-        Ok(())
+    /// Patch a single CharacterSuperMove entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
+        buf[Self::OFF_ORDER..Self::OFF_ORDER+2].copy_from_slice(&self.order.to_be_bytes());
+        buf[Self::OFF_OCCASION] = self.occasion_flags;
+        buf[Self::OFF_EFFECT_ID] = self.effect_id as u8;
+        buf[Self::OFF_SCOPE_ID] = self.scope_id;
+        buf[Self::OFF_CATEGORY_ID] = self.category_id as u8;
+        buf[Self::OFF_EFFECT_SPEED] = self.effect_speed as u8;
+        buf[Self::OFF_EFFECT_SP] = self.effect_sp as u8;
+        buf[Self::OFF_EFFECT_BASE..Self::OFF_EFFECT_BASE+2].copy_from_slice(&self.effect_base.to_be_bytes());
+        buf[Self::OFF_TYPE_ID] = self.type_id as u8;
+        buf[Self::OFF_STATE_ID] = self.state_id as u8;
+        buf[Self::OFF_STATE_MISS] = self.state_miss as u8;
+        buf[Self::OFF_SHIP_OCC_ID] = self.ship_occasion_id as u8;
+        buf[Self::OFF_SHIP_EFFECT_ID..Self::OFF_SHIP_EFFECT_ID+2].copy_from_slice(&self.ship_effect_id.to_be_bytes());
+        buf[Self::OFF_SHIP_EFFECT_SP] = self.ship_effect_sp as u8;
+        buf[Self::OFF_SHIP_EFFECT_TURNS] = self.ship_effect_turns as u8;
+        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE+2].copy_from_slice(&self.ship_effect_base.to_be_bytes());
+        buf[Self::OFF_UNKNOWN] = self.unknown as u8;
     }
 
-    /// Write all CharacterSuperMove entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all CharacterSuperMove entries into a buffer.
+    pub fn patch_all(entries: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for e in entries {
+            let idx = (e.id - id_ranges::CHARACTER_SUPER_MOVE.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                e.patch_entry(&mut buf[start..end]);
+            }
+        }
     }
 }
 

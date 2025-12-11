@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 use crate::entries::Trait;
 
 /// A ship accessory in the game.
@@ -38,8 +38,15 @@ pub struct ShipAccessory {
 
 impl ShipAccessory {
     /// Size of one entry in bytes (US/JP).
-    /// 17 + 1 + 16 (4 traits * 4 bytes) + 2 + 1 + 1 + 1 + 1 = 40 bytes
     pub const ENTRY_SIZE: usize = 40;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_SHIP_FLAGS: usize = 17;
+    const OFF_TRAITS: usize = 18; // 4 traits * 4 bytes
+    const OFF_BUY_PRICE: usize = 34;
+    const OFF_SELL: usize = 36;
+    const OFF_ORDER1: usize = 37;
+    const OFF_ORDER2: usize = 38;
 
     /// Read a single accessory from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
@@ -112,28 +119,31 @@ impl ShipAccessory {
         (self.ship_flags & bit) != 0
     }
 
-    /// Write a single accessory to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_u8(self.ship_flags)?;
-        if version.region == Region::Eu { writer.write_u8(0)?; }
-        for t in &self.traits {
-            writer.write_i8(t.id)?;
-            writer.write_u8(0)?;
-            writer.write_i16_be(t.value)?;
+    /// Patch a single accessory entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_SHIP_FLAGS] = self.ship_flags;
+        for (i, t) in self.traits.iter().enumerate() {
+            let off = Self::OFF_TRAITS + i * 4;
+            buf[off] = t.id as u8;
+            buf[off+2..off+4].copy_from_slice(&t.value.to_be_bytes());
         }
-        writer.write_u16_be(self.buy_price)?;
-        writer.write_i8(self.sell_percent)?;
-        writer.write_i8(self.order1)?;
-        writer.write_i8(self.order2)?;
-        writer.write_u8(0)?;
-        Ok(())
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_SELL] = self.sell_percent as u8;
+        buf[Self::OFF_ORDER1] = self.order1 as u8;
+        buf[Self::OFF_ORDER2] = self.order2 as u8;
     }
 
-    /// Write all accessory entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all accessory entries into a buffer.
+    pub fn patch_all(entries: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for e in entries {
+            let idx = (e.id - id_ranges::SHIP_ACCESSORY.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                e.patch_entry(&mut buf[start..end]);
+            }
+        }
     }
 }
 

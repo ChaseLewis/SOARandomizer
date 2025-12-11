@@ -144,169 +144,191 @@ impl GameRoot {
     /// Write accessories to the DOL.
     pub fn write_accessories(&mut self, accessories: &[Accessory]) -> Result<()> {
         let data_range = self.offsets.accessory_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        Accessory::write_all_data(accessories, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        Accessory::patch_all(accessories, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write armors to the DOL.
+    /// Write armors to the DOL (patch approach).
     pub fn write_armors(&mut self, armors: &[Armor]) -> Result<()> {
         let data_range = self.offsets.armor_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        Armor::write_all_data(armors, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        Armor::patch_all(armors, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write weapons to the DOL.
+    /// Write weapons to the DOL (patch approach).
     pub fn write_weapons(&mut self, weapons: &[Weapon]) -> Result<()> {
         let data_range = self.offsets.weapon_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        Weapon::write_all_data(weapons, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        Weapon::patch_all(weapons, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write usable items to the DOL.
+    /// Write usable items to the DOL (patch approach).
     pub fn write_usable_items(&mut self, items: &[UsableItem]) -> Result<()> {
         let data_range = self.offsets.usable_item_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        UsableItem::write_all_data(items, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        UsableItem::patch_all(items, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write special items to the DOL.
+    /// Write special items to the DOL (patch approach).
     pub fn write_special_items(&mut self, items: &[SpecialItem]) -> Result<()> {
         let data_range = self.offsets.special_item_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        SpecialItem::write_all_data(items, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        SpecialItem::patch_all(items, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
     /// Write characters to the DOL.
     pub fn write_characters(&mut self, characters: &[Character]) -> Result<()> {
         let data_range = self.offsets.character_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        Character::write_all_data(characters, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        // Read original section, patch only numeric fields, write back
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        Character::patch_all(characters, &mut buffer);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write character magic to the DOL.
+    /// Write character magic to the DOL (patch approach).
     pub fn write_character_magic(&mut self, magic: &[CharacterMagic]) -> Result<()> {
         let data_range = self.offsets.character_magic_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        CharacterMagic::write_all_data(magic, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        CharacterMagic::patch_all(magic, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write character super moves to the DOL.
+    /// Write character super moves to the DOL (patch approach).
     pub fn write_character_super_moves(&mut self, moves: &[CharacterSuperMove]) -> Result<()> {
         let data_range = self.offsets.character_super_move_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        CharacterSuperMove::write_all_data(moves, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        CharacterSuperMove::patch_all(moves, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write shops to the DOL.
+    /// Write shops to the DOL (patch approach).
     pub fn write_shops(&mut self, shops: &[Shop]) -> Result<()> {
         let data_range = self.offsets.shop_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        Shop::write_all_data(shops, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        Shop::patch_all(shops, &mut buffer);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write treasure chests to the DOL.
+    /// Write treasure chests to the DOL (patch approach).
     pub fn write_treasure_chests(&mut self, chests: &[TreasureChest]) -> Result<()> {
         let data_range = self.offsets.treasure_chest_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        TreasureChest::write_all_data(chests, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        TreasureChest::patch_all(chests, &mut buffer);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write crew members to the DOL.
+    /// Write crew members to the DOL (patch approach).
     pub fn write_crew_members(&mut self, members: &[CrewMember]) -> Result<()> {
         let data_range = self.offsets.crew_member_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        CrewMember::write_all_data(members, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        CrewMember::patch_all(members, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write playable ships to the DOL.
+    /// Write playable ships to the DOL (patch approach).
     pub fn write_playable_ships(&mut self, ships: &[PlayableShip]) -> Result<()> {
         let data_range = self.offsets.playable_ship_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        PlayableShip::write_all_data(ships, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        PlayableShip::patch_all(ships, &mut buffer);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write ship cannons to the DOL.
+    /// Write ship cannons to the DOL (patch approach).
     pub fn write_ship_cannons(&mut self, cannons: &[ShipCannon]) -> Result<()> {
         let data_range = self.offsets.ship_cannon_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        ShipCannon::write_all_data(cannons, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        ShipCannon::patch_all(cannons, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write ship accessories to the DOL.
+    /// Write ship accessories to the DOL (patch approach).
     pub fn write_ship_accessories(&mut self, accessories: &[ShipAccessory]) -> Result<()> {
         let data_range = self.offsets.ship_accessory_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        ShipAccessory::write_all_data(accessories, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        ShipAccessory::patch_all(accessories, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write ship items to the DOL.
+    /// Write ship items to the DOL (patch approach).
     pub fn write_ship_items(&mut self, items: &[ShipItem]) -> Result<()> {
         let data_range = self.offsets.ship_item_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        ShipItem::write_all_data(items, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        ShipItem::patch_all(items, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write enemy ships to the DOL.
+    /// Write enemy ships to the DOL (patch approach).
     pub fn write_enemy_ships(&mut self, ships: &[EnemyShip]) -> Result<()> {
         let data_range = self.offsets.enemy_ship_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        EnemyShip::write_all_data(ships, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        EnemyShip::patch_all(ships, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write enemy magic to the DOL.
+    /// Write enemy magic to the DOL (patch approach).
     pub fn write_enemy_magic(&mut self, magic: &[EnemyMagic]) -> Result<()> {
         let data_range = self.offsets.enemy_magic_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        EnemyMagic::write_all_data(magic, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        EnemyMagic::patch_all(magic, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write enemy super moves to the DOL.
+    /// Write enemy super moves to the DOL (patch approach).
     pub fn write_enemy_super_moves(&mut self, moves: &[EnemySuperMove]) -> Result<()> {
         let data_range = self.offsets.enemy_super_move_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        EnemySuperMove::write_all_data(moves, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        EnemySuperMove::patch_all(moves, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write swashbucklers to the DOL.
+    /// Write swashbucklers to the DOL (patch approach).
     pub fn write_swashbucklers(&mut self, swashbucklers: &[Swashbuckler]) -> Result<()> {
         let data_range = self.offsets.swashbuckler_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        Swashbuckler::write_all_data(swashbucklers, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        Swashbuckler::patch_all(swashbucklers, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write spirit curves to the DOL.
+    /// Write spirit curves to the DOL (patch approach).
     pub fn write_spirit_curves(&mut self, curves: &[SpiritCurve]) -> Result<()> {
         let data_range = self.offsets.spirit_curve_data.clone();
-        let mut buffer = std::io::Cursor::new(Vec::new());
-        SpiritCurve::write_all_data(curves, &mut buffer, &self.version)?;
-        self.write_to_dol(data_range, buffer.get_ref())
+        let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+        let mut buffer = dol[data_range.clone()].to_vec();
+        SpiritCurve::patch_all(curves, &mut buffer, &self.version);
+        self.write_to_dol(data_range, &buffer)
     }
 
-    /// Write exp boosts to the DOL.
+    /// Write exp boosts to the DOL (patch approach).
     pub fn write_exp_boosts(&mut self, boosts: &[ExpBoost]) -> Result<()> {
         if let Some(data_range) = self.offsets.exp_boost_data.clone() {
-            let mut buffer = std::io::Cursor::new(Vec::new());
-            ExpBoost::write_all_data(boosts, &mut buffer, &self.version)?;
-            self.write_to_dol(data_range, buffer.get_ref())
+            let dol = self.dol_data.as_ref().ok_or_else(|| crate::error::Error::InvalidIso("DOL not loaded".into()))?;
+            let mut buffer = dol[data_range.clone()].to_vec();
+            ExpBoost::patch_all(boosts, &mut buffer, &self.version);
+            self.write_to_dol(data_range, &buffer)
         } else {
             Ok(())
         }

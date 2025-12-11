@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Shop entry with up to 48 item slots.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -27,8 +27,11 @@ pub struct Shop {
 
 impl Shop {
     /// Size of one shop entry in bytes.
-    /// 2 (id) + 2 (pad) + 4 (sot_pos) + 48*2 (items) = 104 bytes
     pub const ENTRY_SIZE: usize = 104;
+    
+    // Field offsets
+    // 0-1 = id, 2-3 = pad, 4-7 = sot_pos (don't change these)
+    const OFF_ITEMS: usize = 8; // 48 items * 2 bytes each
 
     /// Get the number of items in this shop.
     pub fn item_count(&self) -> usize {
@@ -79,26 +82,24 @@ impl Shop {
         Ok(shops)
     }
 
-    /// Write a single shop entry to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, _version: &GameVersion) -> Result<()> {
-        writer.write_u16_be(self.id)?;
-        writer.write_i16_be(0)?; // padding
-        writer.write_u32_be(self.sot_pos)?;
-        
-        // Write all 48 item slots
+    /// Patch a single shop entry in a mutable buffer.
+    /// Only patches item IDs - id, pad, sot_pos are untouched.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
         for i in 0..48 {
             let item_id = self.item_ids.get(i).copied().unwrap_or(-1);
-            writer.write_i16_be(item_id)?;
+            let off = Self::OFF_ITEMS + i * 2;
+            buf[off..off+2].copy_from_slice(&item_id.to_be_bytes());
         }
-        
-        Ok(())
     }
 
-    /// Write all shop entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(shops: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for shop in shops {
-            shop.write_one(writer, version)?;
+    /// Patch all shop entries into a buffer.
+    pub fn patch_all(shops: &[Self], buf: &mut [u8]) {
+        for (idx, shop) in shops.iter().enumerate() {
+            let start = idx * Self::ENTRY_SIZE;
+            let end = start + Self::ENTRY_SIZE;
+            if end <= buf.len() {
+                shop.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }

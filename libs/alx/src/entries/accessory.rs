@@ -10,7 +10,7 @@ use super::traits::Trait;
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Accessory entry (uses same structure as Armor).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,6 +60,15 @@ impl Default for Accessory {
 impl Accessory {
     /// Size of one accessory entry in bytes (same as armor).
     pub const ENTRY_SIZE: usize = Armor::ENTRY_SIZE;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_CHAR_FLAGS: usize = 17;
+    const OFF_SELL_PERCENT: usize = 18;
+    const OFF_ORDER1: usize = 19;
+    const OFF_ORDER2: usize = 20;
+    // 21 = pad
+    const OFF_BUY_PRICE: usize = 22;
+    const OFF_TRAITS: usize = 24; // Each trait: 1 id + 1 pad + 2 value = 4 bytes
 
     /// Read a single accessory entry from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
@@ -132,44 +141,35 @@ impl Accessory {
         }
     }
 
-    /// Write a single accessory entry to binary data.
-    /// Note: Description fields are NOT written (stored separately).
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_u8(self.character_flags.0)?;
-        writer.write_i8(self.sell_percent)?;
-        writer.write_i8(self.order1)?;
-        writer.write_i8(self.order2)?;
+    /// Patch a single accessory entry in a mutable buffer.
+    /// Only writes numeric fields - strings and padding are untouched.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_CHAR_FLAGS] = self.character_flags.0;
+        buf[Self::OFF_SELL_PERCENT] = self.sell_percent as u8;
+        buf[Self::OFF_ORDER1] = self.order1 as u8;
+        buf[Self::OFF_ORDER2] = self.order2 as u8;
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
         
-        // Padding byte (JP/US only)
-        if version.region != Region::Eu {
-            writer.write_u8(0)?;
+        // Traits: each 4 bytes (id=1, pad=1, value=2)
+        for (i, t) in self.traits.iter().enumerate() {
+            let off = Self::OFF_TRAITS + i * 4;
+            buf[off] = t.id as u8;
+            // Skip pad at off+1
+            buf[off+2..off+4].copy_from_slice(&t.value.to_be_bytes());
         }
-        
-        writer.write_u16_be(self.buy_price)?;
-        
-        // Write 4 traits
-        for trait_slot in &self.traits {
-            writer.write_i8(trait_slot.id)?;
-            writer.write_u8(0)?; // padding
-            writer.write_i16_be(trait_slot.value)?;
-        }
-        
-        // EU has extra padding
-        if version.region == Region::Eu {
-            writer.write_u8(0)?;
-            writer.write_u8(0)?;
-        }
-        
-        Ok(())
     }
 
-    /// Write all accessory entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(accessories: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
+    /// Patch all accessory entries into a buffer.
+    pub fn patch_all(accessories: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
         for acc in accessories {
-            acc.write_one(writer, version)?;
+            let idx = (acc.id - id_ranges::ACCESSORY.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                acc.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }
 
@@ -181,8 +181,6 @@ mod tests {
     #[test]
     fn test_accessory_binary_roundtrip() {
         // Sample accessory binary data (40 bytes for US/JP)
-        // Name (17 bytes) + char_flags (1) + sell% (1) + order1 (1) + order2 (1) + pad (1) + buy (2)
-        // + 4 traits (4 * 4 = 16)
         let original: Vec<u8> = vec![
             // Name: "Test Ring" (17 bytes with padding)
             b'T', b'e', b's', b't', b' ', b'R', b'i', b'n', b'g', 0, 0, 0, 0, 0, 0, 0, 0,
@@ -219,12 +217,12 @@ mod tests {
         assert_eq!(accessory.traits[0].id, 0);
         assert_eq!(accessory.traits[0].value, 5);
 
-        // Write back
-        let mut output = Cursor::new(Vec::new());
-        accessory.write_one(&mut output, &version).unwrap();
+        // Patch back to a copy of original
+        let mut output = original.clone();
+        accessory.patch_entry(&mut output);
 
-        // Compare byte-for-byte
-        assert_eq!(original, output.into_inner(), "Binary round-trip failed: output differs from original");
+        // Numeric fields should match, string (name) unchanged
+        assert_eq!(original, output, "Patch round-trip failed");
     }
 }
 

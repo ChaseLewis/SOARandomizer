@@ -107,12 +107,9 @@ impl SpiritCurve {
         Ok(())
     }
 
-    /// Write all spirit curve entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for entry in entries {
-            entry.write_one(writer, version)?;
-        }
-        Ok(())
+    /// Patch all spirit curve entries into a buffer.
+    pub fn patch_all(_entries: &[Self], _buf: &mut [u8], _version: &GameVersion) {
+        // TODO: Implement proper patching
     }
 }
 

@@ -7,7 +7,7 @@ use super::traits::Trait;
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Character flags for equipment.
 /// Bit 5 = Vyse, Bit 4 = Aika, Bit 3 = Fina, Bit 2 = Drachma, Bit 1 = Enrique, Bit 0 = Gilder
@@ -97,6 +97,15 @@ impl Armor {
     /// Size of one armor entry in bytes.
     /// Name (17) + flags (1) + sell (1) + order1 (1) + order2 (1) + pad (1) + buy (2) + traits (4 * 4) = 40 bytes
     pub const ENTRY_SIZE: usize = 40;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_CHAR_FLAGS: usize = 17;
+    const OFF_SELL_PERCENT: usize = 18;
+    const OFF_ORDER1: usize = 19;
+    const OFF_ORDER2: usize = 20;
+    // 21 = pad
+    const OFF_BUY_PRICE: usize = 22;
+    const OFF_TRAITS: usize = 24; // 4 traits, each 4 bytes
 
     /// Read a single armor entry from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
@@ -169,44 +178,33 @@ impl Armor {
         }
     }
 
-    /// Write a single armor entry to binary data.
-    /// Note: Description fields are NOT written (stored separately).
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_u8(self.character_flags.0)?;
-        writer.write_i8(self.sell_percent)?;
-        writer.write_i8(self.order1)?;
-        writer.write_i8(self.order2)?;
+    /// Patch a single armor entry in a mutable buffer.
+    /// Only writes numeric fields - strings and padding are untouched.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_CHAR_FLAGS] = self.character_flags.0;
+        buf[Self::OFF_SELL_PERCENT] = self.sell_percent as u8;
+        buf[Self::OFF_ORDER1] = self.order1 as u8;
+        buf[Self::OFF_ORDER2] = self.order2 as u8;
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
         
-        // Padding byte (JP/US only)
-        if version.region != Region::Eu {
-            writer.write_u8(0)?;
+        for (i, t) in self.traits.iter().enumerate() {
+            let off = Self::OFF_TRAITS + i * 4;
+            buf[off] = t.id as u8;
+            buf[off+2..off+4].copy_from_slice(&t.value.to_be_bytes());
         }
-        
-        writer.write_u16_be(self.buy_price)?;
-        
-        // Write 4 traits
-        for trait_slot in &self.traits {
-            writer.write_i8(trait_slot.id)?;
-            writer.write_u8(0)?; // padding
-            writer.write_i16_be(trait_slot.value)?;
-        }
-        
-        // EU has extra padding
-        if version.region == Region::Eu {
-            writer.write_u8(0)?;
-            writer.write_u8(0)?;
-        }
-        
-        Ok(())
     }
 
-    /// Write all armor entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(armors: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for armor in armors {
-            armor.write_one(writer, version)?;
+    /// Patch all armor entries into a buffer.
+    pub fn patch_all(armors: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for a in armors {
+            let idx = (a.id - id_ranges::ARMOR.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                a.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }
 
@@ -268,12 +266,12 @@ mod tests {
         assert_eq!(armor.traits[0].id, 17);
         assert_eq!(armor.traits[0].value, 10);
 
-        // Write back
-        let mut output = Cursor::new(Vec::new());
-        armor.write_one(&mut output, &version).unwrap();
+        // Patch back to copy
+        let mut patched = original.clone();
+        armor.patch_entry(&mut patched);
 
-        // Compare byte-for-byte
-        assert_eq!(original, output.into_inner(), "Binary round-trip failed");
+        // Compare byte-for-byte (numeric fields match)
+        assert_eq!(original, patched, "Binary patch round-trip failed");
     }
 }
 

@@ -52,6 +52,13 @@ fn parse_binary(s: &str) -> u8 {
     u8::from_str_radix(s, 2).unwrap_or(0)
 }
 
+/// Helper to parse a binary string as i16 (e.g., "0b111111000111").
+fn parse_binary_i16(s: &str) -> i16 {
+    let s = s.trim();
+    let s = s.strip_prefix("0b").or_else(|| s.strip_prefix("0B")).unwrap_or(s);
+    i16::from_str_radix(s, 2).unwrap_or(0)
+}
+
 impl CsvImporter {
     /// Import accessories from CSV.
     pub fn import_accessories<R: Read>(reader: R) -> Result<Vec<Accessory>> {
@@ -293,7 +300,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(item) = items.iter_mut().find(|i| i.id == id) {
-                item.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 item.occasion_flags = OccasionFlags(parse_binary(record.get(2).unwrap_or("0")));
                 // Skip [M], [B], [S] at 3-5
                 item.effect_id = parse_or_default(record.get(6).unwrap_or("-1"));
@@ -314,7 +321,7 @@ impl CsvImporter {
                 // Skip [State Name] at 21
                 item.state_miss = parse_or_default(record.get(22).unwrap_or("0"));
                 // Skip Pads at 23-25, description pos/size at 26-27
-                item.description = record.get(28).unwrap_or("").to_string();
+                // Skip description - strings are read-only
             }
         }
         
@@ -359,16 +366,18 @@ impl CsvImporter {
     }
     
     /// Import characters from CSV.
-    /// Import characters from CSV, merging with existing data.
+    /// Import characters from CSV, matching reference ALX format (76 columns).
     /// 
-    /// The CSV only contains a subset of fields, so we need to start with
-    /// existing data and update only the fields present in the CSV.
-    /// 
-    /// CSV columns (matching export):
-    /// 0: Entry ID, 1: Entry US Name, 2: Age, 3: Gender, 4: Max MP, 5: Element ID,
-    /// 6: Base MAXHP, 7: Base Power, 8: Base Will, 9: Base Vigor, 10: Base Agile, 11: Base Quick,
-    /// 12: Weapon ID, 13: Armor ID, 14: Accessory ID,
-    /// 15-20: Magic EXP (6 elements)
+    /// CSV columns:
+    /// 0: Entry ID, 1: Entry US Name, 2: Age, 3: Gender ID, 4: [Gender Name],
+    /// 5: Width, 6: Depth, 7: MAXMP, 8: Element ID, 9: [Element Name], 10: Pad 1,
+    /// 11: Weapon ID, 12: [Weapon Name], 13: Armor ID, 14: [Armor Name], 15: Accessory ID, 16: [Accessory Name],
+    /// 17: Movement Flags, 18-29: [Flag columns],
+    /// 30: HP, 31: MAXHP, 32: MAXHP Growth, 33: SP, 34: MAXSP, 35: Counter%, 36: Pad 2,
+    /// 37: EXP, 38: MAXMP Growth, 39: Unk 1,
+    /// 40-45: Element resistances (6), 46-60: State resistances (15),
+    /// 61: Danger, 62: Power, 63: Will, 64: Vigor, 65: Agile, 66: Quick, 67: Pad 3,
+    /// 68-72: Growth rates (5), 73-78: Magic EXP (6)
     pub fn import_characters<R: Read>(reader: R, existing: &[Character]) -> Result<Vec<Character>> {
         let mut rdr = csv::Reader::from_reader(reader);
         let mut characters: Vec<Character> = existing.to_vec();
@@ -378,30 +387,61 @@ impl CsvImporter {
             
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
-            // Find existing character to update
-            let char = characters.iter_mut().find(|c| c.id == id);
-            if let Some(c) = char {
-                // Update fields from CSV
-                c.name = record.get(1).unwrap_or("").to_string();
+            if let Some(c) = characters.iter_mut().find(|c| c.id == id) {
+                // Skip name at column 1 - strings are read-only
                 c.age = parse_or_default(record.get(2).unwrap_or("0"));
-                // Gender is text like "Male"/"Female", need to convert
-                let gender_str = record.get(3).unwrap_or("Male");
-                c.gender_id = if gender_str.eq_ignore_ascii_case("Female") { 1 } else { 0 };
-                c.max_mp = parse_or_default(record.get(4).unwrap_or("0"));
-                c.element_id = parse_or_default(record.get(5).unwrap_or("0"));
-                c.max_hp = parse_or_default(record.get(6).unwrap_or("0"));
-                c.power = parse_or_default(record.get(7).unwrap_or("0"));
-                c.will = parse_or_default(record.get(8).unwrap_or("0"));
-                c.vigor = parse_or_default(record.get(9).unwrap_or("0"));
-                c.agile = parse_or_default(record.get(10).unwrap_or("0"));
-                c.quick = parse_or_default(record.get(11).unwrap_or("0"));
-                c.weapon_id = parse_or_default(record.get(12).unwrap_or("0"));
+                c.gender_id = parse_or_default(record.get(3).unwrap_or("0"));
+                // Skip [Gender Name] at 4
+                c.width = parse_or_default(record.get(5).unwrap_or("0"));
+                c.depth = parse_or_default(record.get(6).unwrap_or("0"));
+                c.max_mp = parse_or_default(record.get(7).unwrap_or("0"));
+                c.element_id = parse_or_default(record.get(8).unwrap_or("0"));
+                // Skip [Element Name] at 9, Pad 1 at 10
+                c.weapon_id = parse_or_default(record.get(11).unwrap_or("0"));
+                // Skip [Weapon Name] at 12
                 c.armor_id = parse_or_default(record.get(13).unwrap_or("0"));
-                c.accessory_id = parse_or_default(record.get(14).unwrap_or("0"));
+                // Skip [Armor Name] at 14
+                c.accessory_id = parse_or_default(record.get(15).unwrap_or("0"));
+                // Skip [Accessory Name] at 16
+                c.movement_flags = parse_binary_i16(record.get(17).unwrap_or("0"));
+                // Skip flag columns 18-29
+                c.hp = parse_or_default(record.get(30).unwrap_or("0"));
+                c.max_hp = parse_or_default(record.get(31).unwrap_or("0"));
+                c.max_hp_growth = parse_or_default(record.get(32).unwrap_or("0"));
+                c.sp = parse_or_default(record.get(33).unwrap_or("0"));
+                c.max_sp = parse_or_default(record.get(34).unwrap_or("0"));
+                c.counter_percent = parse_or_default(record.get(35).unwrap_or("0"));
+                // Skip Pad 2 at 36
+                c.exp = parse_or_default(record.get(37).unwrap_or("0"));
+                c.max_mp_growth = parse_or_default(record.get(38).unwrap_or("0"));
+                c.unknown1 = parse_or_default(record.get(39).unwrap_or("0"));
                 
-                // Magic EXP (6 elements)
+                // Element resistances (6 values at 40-45)
                 for i in 0..6 {
-                    c.magic_exp[i] = parse_or_default(record.get(15 + i).unwrap_or("0"));
+                    c.element_resistances[i] = parse_or_default(record.get(40 + i).unwrap_or("0"));
+                }
+                
+                // State resistances (15 values at 46-60)
+                for i in 0..15 {
+                    c.state_resistances[i] = parse_or_default(record.get(46 + i).unwrap_or("0"));
+                }
+                
+                c.danger = parse_or_default(record.get(61).unwrap_or("0"));
+                c.power = parse_or_default(record.get(62).unwrap_or("0"));
+                c.will = parse_or_default(record.get(63).unwrap_or("0"));
+                c.vigor = parse_or_default(record.get(64).unwrap_or("0"));
+                c.agile = parse_or_default(record.get(65).unwrap_or("0"));
+                c.quick = parse_or_default(record.get(66).unwrap_or("0"));
+                // Skip Pad 3 at 67
+                c.power_growth = parse_or_default(record.get(68).unwrap_or("0"));
+                c.will_growth = parse_or_default(record.get(69).unwrap_or("0"));
+                c.vigor_growth = parse_or_default(record.get(70).unwrap_or("0"));
+                c.agile_growth = parse_or_default(record.get(71).unwrap_or("0"));
+                c.quick_growth = parse_or_default(record.get(72).unwrap_or("0"));
+                
+                // Magic EXP (6 values at 73-78)
+                for i in 0..6 {
+                    c.magic_exp[i] = parse_or_default(record.get(73 + i).unwrap_or("0"));
                 }
             }
         }
@@ -411,12 +451,17 @@ impl CsvImporter {
     
     /// Import character magic from CSV, merging with existing data.
     /// 
-    /// CSV columns (matching export):
+    /// CSV columns (matching export with 46 columns):
     /// 0: Entry ID, 1: Entry US Name, 2: Element ID, 3: [Element Name],
-    /// 4: Order, 5: Effect ID, 6: [Effect Name], 7: Scope ID, 8: [Scope Name],
-    /// 9: Effect SP, 10: Effect Base, 11: Type ID, 12: [Type Name],
-    /// 13: State ID, 14: [State Name], 15: State Miss%,
-    /// 16: [US Descr Pos], 17: [US Descr Size], 18: US Descr Str
+    /// 4: Order, 5: Occasion Flags, 6-8: [M/B/S],
+    /// 9: Effect ID, 10: [Effect Name], 11: Scope ID, 12: [Scope Name],
+    /// 13: Category ID, 14: [Category Name], 15: Effect Speed, 16: Effect SP,
+    /// 17-18: Pad, 19: Effect Base, 20: Type ID, 21: [Type Name],
+    /// 22: State ID, 23: [State Name], 24: State Miss%,
+    /// 25-27: Pad, 28: Ship Occ ID, 29: [Ship Occ Name], 30: Pad,
+    /// 31: Ship Eff ID, 32: [Ship Eff Name], 33: Ship Eff SP, 34: Ship Eff Turns,
+    /// 35: Ship Eff Base, 36: Unk, 37-39: Pad,
+    /// 40-42: [US Descr], 43-45: [Ship Descr]
     pub fn import_character_magic<R: Read>(reader: R, existing: &[CharacterMagic]) -> Result<Vec<CharacterMagic>> {
         let mut rdr = csv::Reader::from_reader(reader);
         let mut magic: Vec<CharacterMagic> = existing.to_vec();
@@ -428,23 +473,26 @@ impl CsvImporter {
             
             // Find existing entry to update
             if let Some(m) = magic.iter_mut().find(|m| m.id == id) {
-                m.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 m.element_id = parse_or_default(record.get(2).unwrap_or("0"));
-                // Skip [Element Name] at 3
                 m.order = parse_or_default(record.get(4).unwrap_or("0"));
-                m.effect_id = parse_or_default(record.get(5).unwrap_or("-1"));
-                // Skip [Effect Name] at 6
-                m.scope_id = parse_or_default(record.get(7).unwrap_or("0"));
-                // Skip [Scope Name] at 8
-                m.effect_sp = parse_or_default(record.get(9).unwrap_or("0"));
-                m.effect_base = parse_or_default(record.get(10).unwrap_or("0"));
-                m.type_id = parse_or_default(record.get(11).unwrap_or("0"));
-                // Skip [Type Name] at 12
-                m.state_id = parse_or_default(record.get(13).unwrap_or("0"));
-                // Skip [State Name] at 14
-                m.state_miss = parse_or_default(record.get(15).unwrap_or("0"));
-                // Skip description pos/size (read-only), keep description
-                m.description = record.get(18).unwrap_or("").to_string();
+                m.occasion_flags = parse_binary(record.get(5).unwrap_or("0"));
+                m.effect_id = parse_or_default(record.get(9).unwrap_or("-1"));
+                m.scope_id = parse_or_default(record.get(11).unwrap_or("0"));
+                m.category_id = parse_or_default(record.get(13).unwrap_or("0"));
+                m.effect_speed = parse_or_default(record.get(15).unwrap_or("0"));
+                m.effect_sp = parse_or_default(record.get(16).unwrap_or("0"));
+                m.effect_base = parse_or_default(record.get(19).unwrap_or("0"));
+                m.type_id = parse_or_default(record.get(20).unwrap_or("0"));
+                m.state_id = parse_or_default(record.get(22).unwrap_or("0"));
+                m.state_miss = parse_or_default(record.get(24).unwrap_or("0"));
+                m.ship_occasion_id = parse_or_default(record.get(28).unwrap_or("0"));
+                m.ship_effect_id = parse_or_default(record.get(31).unwrap_or("-1"));
+                m.ship_effect_sp = parse_or_default(record.get(33).unwrap_or("0"));
+                m.ship_effect_turns = parse_or_default(record.get(34).unwrap_or("0"));
+                m.ship_effect_base = parse_or_default(record.get(35).unwrap_or("0"));
+                m.unknown = parse_or_default(record.get(36).unwrap_or("-1"));
+                // Skip descriptions - strings are read-only
             }
         }
         
@@ -473,7 +521,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(m) = moves.iter_mut().find(|m| m.id == id) {
-                m.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 m.element_id = parse_or_default(record.get(2).unwrap_or("0"));
                 m.order = parse_or_default(record.get(4).unwrap_or("0"));
                 m.occasion_flags = parse_binary(record.get(5).unwrap_or("0"));
@@ -492,7 +540,7 @@ impl CsvImporter {
                 m.ship_effect_turns = parse_or_default(record.get(34).unwrap_or("0"));
                 m.ship_effect_base = parse_or_default(record.get(35).unwrap_or("0"));
                 m.unknown = parse_or_default(record.get(36).unwrap_or("0"));
-                m.description = record.get(42).unwrap_or("").to_string();
+                // Skip description - strings are read-only
             }
         }
         
@@ -526,7 +574,7 @@ impl CsvImporter {
                     }
                 }
                 // Skip desc pos/size, keep description
-                shop.description = record.get(51).unwrap_or("").to_string();
+                // Skip description - strings are read-only
             }
         }
         
@@ -575,7 +623,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(m) = members.iter_mut().find(|m| m.id == id) {
-                m.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 m.position_id = parse_or_default(record.get(2).unwrap_or("0"));
                 m.trait_id = parse_or_default(record.get(4).unwrap_or("-1"));
                 m.trait_value = parse_or_default(record.get(6).unwrap_or("0"));
@@ -583,7 +631,7 @@ impl CsvImporter {
                 m.ship_effect_sp = parse_or_default(record.get(8).unwrap_or("0"));
                 m.ship_effect_turns = parse_or_default(record.get(9).unwrap_or("0"));
                 m.ship_effect_base = parse_or_default(record.get(10).unwrap_or("0"));
-                m.description = record.get(13).unwrap_or("").to_string();
+                // Skip description - strings are read-only
             }
         }
         
@@ -607,7 +655,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(ship) = ships.iter_mut().find(|s| s.id == id) {
-                ship.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 ship.max_hp = parse_or_default(record.get(2).unwrap_or("0"));
                 ship.max_sp = parse_or_default(record.get(3).unwrap_or("0"));
                 ship.sp = parse_or_default(record.get(4).unwrap_or("0"));
@@ -653,7 +701,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(c) = cannons.iter_mut().find(|c| c.id == id) {
-                c.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 c.ship_flags = parse_binary(record.get(2).unwrap_or("0"));
                 c.type_id = parse_or_default(record.get(9).unwrap_or("0"));
                 c.element_id = parse_or_default(record.get(11).unwrap_or("-1"));
@@ -666,7 +714,7 @@ impl CsvImporter {
                 c.buy_price = parse_or_default(record.get(20).unwrap_or("0"));
                 c.sell_percent = parse_or_default(record.get(21).unwrap_or("0"));
                 c.order1 = parse_or_default(record.get(22).unwrap_or("0"));
-                c.description = record.get(25).unwrap_or("").to_string();
+                // Skip description - strings are read-only
             }
         }
         
@@ -692,7 +740,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(acc) = accessories.iter_mut().find(|a| a.id == id) {
-                acc.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 acc.ship_flags = parse_binary(record.get(2).unwrap_or("0"));
                 
                 // Traits: columns 9,11 / 12,14 / 15,17 / 18,20
@@ -708,7 +756,7 @@ impl CsvImporter {
                 acc.buy_price = parse_or_default(record.get(21).unwrap_or("0"));
                 acc.sell_percent = parse_or_default(record.get(22).unwrap_or("0"));
                 acc.order1 = parse_or_default(record.get(23).unwrap_or("0"));
-                acc.description = record.get(26).unwrap_or("").to_string();
+                // Skip description - strings are read-only
             }
         }
         
@@ -733,7 +781,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(item) = items.iter_mut().find(|i| i.id == id) {
-                item.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 item.occasion_flags = parse_binary(record.get(2).unwrap_or("0"));
                 item.ship_effect_id = parse_or_default(record.get(6).unwrap_or("0"));
                 item.ship_effect_turns = parse_or_default(record.get(7).unwrap_or("0"));
@@ -747,7 +795,7 @@ impl CsvImporter {
                 item.unknown1 = parse_or_default(record.get(16).unwrap_or("0"));
                 item.unknown2 = parse_or_default(record.get(17).unwrap_or("0"));
                 item.hit = parse_or_default(record.get(18).unwrap_or("0"));
-                item.description = record.get(21).unwrap_or("").to_string();
+                // Skip description - strings are read-only
             }
         }
         
@@ -771,7 +819,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(ship) = ships.iter_mut().find(|s| s.id == id) {
-                ship.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 ship.max_hp = parse_or_default(record.get(2).unwrap_or("0"));
                 ship.will = parse_or_default(record.get(3).unwrap_or("0"));
                 ship.defense = parse_or_default(record.get(4).unwrap_or("0"));
@@ -827,7 +875,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(m) = magic.iter_mut().find(|m| m.id == id) {
-                m.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 m.category_id = parse_or_default(record.get(2).unwrap_or("0"));
                 m.effect_id = parse_or_default(record.get(3).unwrap_or("-1"));
                 m.scope_id = parse_or_default(record.get(5).unwrap_or("0"));
@@ -864,7 +912,7 @@ impl CsvImporter {
             let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
             
             if let Some(m) = moves.iter_mut().find(|m| m.id == id) {
-                m.name = record.get(1).unwrap_or("").to_string();
+                // Skip name - strings are read-only
                 m.category_id = parse_or_default(record.get(2).unwrap_or("0"));
                 m.effect_id = parse_or_default(record.get(4).unwrap_or("-1"));
                 m.scope_id = parse_or_default(record.get(6).unwrap_or("0"));

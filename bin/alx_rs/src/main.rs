@@ -226,6 +226,9 @@ macro_rules! import_csv {
 
 
 fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    // Ensure DOL is loaded before any writes
+    game.load_dol()?;
+    
     // Import accessories
     if let Some(data) = import_csv!(import_dir, "accessory.csv", import_accessories, "accessories") {
         game.write_accessories(&data)?;

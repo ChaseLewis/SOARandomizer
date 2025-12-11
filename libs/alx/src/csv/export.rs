@@ -415,35 +415,122 @@ impl CsvExporter {
         Ok(())
     }
 
-    /// Export characters to CSV format.
+    /// Export characters to CSV format matching reference ALX format.
     pub fn export_characters<W: Write>(characters: &[Character], writer: W) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
         
+        // Header matching reference ALX format (76 columns)
         wtr.write_record(&[
             "Entry ID", "Entry US Name",
-            "Age", "Gender", "Max MP", "Element ID",
-            "Base MAXHP", "Base Power", "Base Will", "Base Vigor", "Base Agile", "Base Quick",
-            "Weapon ID", "Armor ID", "Accessory ID",
+            "Age", "Gender ID", "[Gender Name]",
+            "Width", "Depth", "MAXMP", "Element ID", "[Element Name]", "Pad 1",
+            "Weapon ID", "[Weapon Name]", "Armor ID", "[Armor Name]", "Accessory ID", "[Accessory Name]",
+            "Movement Flags",
+            "[May Dodge]", "[Unk Damage]", "[Unk Ranged]", "[Unk Melee]",
+            "[Ranged Atk]", "[Melee Atk]", "[Ranged Only]", "[Take Cover]",
+            "[In Air]", "[On Ground]", "[Reserved]", "[May Move]",
+            "HP", "MAXHP", "MAXHP Growth", "SP", "MAXSP", "Counter%", "Pad 2",
+            "EXP", "MAXMP Growth", "Unk 1",
+            "Green", "Red", "Purple", "Blue", "Yellow", "Silver",
+            "Poison", "Unconscious", "Stone", "Sleep", "Confusion",
+            "Silence", "Fatigue", "Revival", "Weak",
+            "State 10", "State 11", "State 12", "State 13", "State 14", "State 15",
+            "Danger", "Power", "Will", "Vigor", "Agile", "Quick", "Pad 3",
+            "Power Growth", "Will Growth", "Vigor Growth", "Agile Growth", "Quick Growth",
             "Green EXP", "Red EXP", "Purple EXP", "Blue EXP", "Yellow EXP", "Silver EXP",
         ])?;
         
         for c in characters {
+            // Movement flags columns
+            let may_dodge = if (c.movement_flags & 0x800) != 0 { "X" } else { "" };
+            let unk_damage = if (c.movement_flags & 0x400) != 0 { "X" } else { "" };
+            let unk_ranged = if (c.movement_flags & 0x200) != 0 { "X" } else { "" };
+            let unk_melee = if (c.movement_flags & 0x100) != 0 { "X" } else { "" };
+            let ranged_atk = if (c.movement_flags & 0x080) != 0 { "X" } else { "" };
+            let melee_atk = if (c.movement_flags & 0x040) != 0 { "X" } else { "" };
+            let ranged_only = if (c.movement_flags & 0x020) != 0 { "X" } else { "" };
+            let take_cover = if (c.movement_flags & 0x010) != 0 { "X" } else { "" };
+            let in_air = if (c.movement_flags & 0x008) != 0 { "X" } else { "" };
+            let on_ground = if (c.movement_flags & 0x004) != 0 { "X" } else { "" };
+            let reserved = if (c.movement_flags & 0x002) != 0 { "X" } else { "" };
+            let may_move = if (c.movement_flags & 0x001) != 0 { "X" } else { "" };
+            
             wtr.write_record(&[
                 c.id.to_string(),
                 c.name.clone(),
                 c.age.to_string(),
+                c.gender_id.to_string(),
                 c.gender_name().to_string(),
+                c.width.to_string(),
+                c.depth.to_string(),
                 c.max_mp.to_string(),
                 c.element_id.to_string(),
+                c.element_name().to_string(),
+                "0".to_string(),  // Pad 1
+                c.weapon_id.to_string(),
+                "".to_string(),  // [Weapon Name] - would need item database
+                c.armor_id.to_string(),
+                "".to_string(),  // [Armor Name]
+                c.accessory_id.to_string(),
+                "".to_string(),  // [Accessory Name]
+                format!("0b{:012b}", c.movement_flags),
+                may_dodge.to_string(),
+                unk_damage.to_string(),
+                unk_ranged.to_string(),
+                unk_melee.to_string(),
+                ranged_atk.to_string(),
+                melee_atk.to_string(),
+                ranged_only.to_string(),
+                take_cover.to_string(),
+                in_air.to_string(),
+                on_ground.to_string(),
+                reserved.to_string(),
+                may_move.to_string(),
+                c.hp.to_string(),
                 c.max_hp.to_string(),
+                c.max_hp_growth.to_string(),
+                c.sp.to_string(),
+                c.max_sp.to_string(),
+                c.counter_percent.to_string(),
+                "0".to_string(),  // Pad 2
+                c.exp.to_string(),
+                format!("{:.2}", c.max_mp_growth),
+                format!("{:.1}", c.unknown1),
+                // Element resistances
+                c.element_resistances[0].to_string(),
+                c.element_resistances[1].to_string(),
+                c.element_resistances[2].to_string(),
+                c.element_resistances[3].to_string(),
+                c.element_resistances[4].to_string(),
+                c.element_resistances[5].to_string(),
+                // State resistances (15)
+                c.state_resistances[0].to_string(),
+                c.state_resistances[1].to_string(),
+                c.state_resistances[2].to_string(),
+                c.state_resistances[3].to_string(),
+                c.state_resistances[4].to_string(),
+                c.state_resistances[5].to_string(),
+                c.state_resistances[6].to_string(),
+                c.state_resistances[7].to_string(),
+                c.state_resistances[8].to_string(),
+                c.state_resistances[9].to_string(),
+                c.state_resistances[10].to_string(),
+                c.state_resistances[11].to_string(),
+                c.state_resistances[12].to_string(),
+                c.state_resistances[13].to_string(),
+                c.state_resistances[14].to_string(),
+                c.danger.to_string(),
                 c.power.to_string(),
                 c.will.to_string(),
                 c.vigor.to_string(),
                 c.agile.to_string(),
                 c.quick.to_string(),
-                c.weapon_id.to_string(),
-                c.armor_id.to_string(),
-                c.accessory_id.to_string(),
+                "0".to_string(),  // Pad 3
+                format!("{:.2}", c.power_growth),
+                format!("{:.2}", c.will_growth),
+                format!("{:.2}", c.vigor_growth),
+                format!("{:.2}", c.agile_growth),
+                format!("{:.2}", c.quick_growth),
                 c.magic_exp[0].to_string(),
                 c.magic_exp[1].to_string(),
                 c.magic_exp[2].to_string(),
@@ -465,35 +552,82 @@ impl CsvExporter {
             "Entry ID", "Entry US Name",
             "Element ID", "[Element Name]",
             "Order",
+            "Occasion Flags", "[M]", "[B]", "[S]",
             "Effect ID", "[Effect Name]",
             "Scope ID", "[Scope Name]",
-            "Effect SP", "Effect Base",
+            "Category ID", "[Category Name]",
+            "Effect Speed", "Effect SP",
+            "Pad 1", "Pad 2",
+            "Effect Base",
             "Type ID", "[Type Name]",
             "State ID", "[State Name]", "State Miss%",
+            "Pad 3", "Pad 4", "Pad 5",
+            "Ship Occ ID", "[Ship Occ Name]",
+            "Pad 6",
+            "Ship Eff ID", "[Ship Eff Name]",
+            "Ship Eff SP", "Ship Eff Turns", "Ship Eff Base",
+            "Unk",
+            "Pad 7", "Pad 8", "Pad 9",
             "[US Descr Pos]", "[US Descr Size]", "US Descr Str",
+            "[Ship US Descr Pos]", "[Ship US Descr Size]", "Ship US Descr Str",
         ])?;
         
         for m in magic {
+            // Decode occasion flags: M=4, B=2, S=1 (matching Ruby ALX)
+            let menu = if m.occasion_flags & 0x04 != 0 { "X" } else { "" };
+            let battle = if m.occasion_flags & 0x02 != 0 { "X" } else { "" };
+            let ship = if m.occasion_flags & 0x01 != 0 { "X" } else { "" };
+            
+            let ship_occ_name = SHIP_OCCASION_NAMES.get(m.ship_occasion_id);
+            let ship_eff_name = EFFECT_NAMES.get(m.ship_effect_id);
+            
             wtr.write_record(&[
                 m.id.to_string(),
                 m.name.clone(),
                 m.element_id.to_string(),
                 ELEMENT_NAMES.get(m.element_id).to_string(),
                 m.order.to_string(),
+                format!("0b{:04b}", m.occasion_flags),
+                menu.to_string(),
+                battle.to_string(),
+                ship.to_string(),
                 m.effect_id.to_string(),
                 EFFECT_NAMES.get(m.effect_id as i16).to_string(),
                 m.scope_id.to_string(),
                 SCOPE_NAMES.get(m.scope_id).to_string(),
+                m.category_id.to_string(),
+                crate::lookups::category_name(m.category_id).to_string(),
+                m.effect_speed.to_string(),
                 m.effect_sp.to_string(),
+                "0".to_string(), // Pad 1
+                "0".to_string(), // Pad 2
                 m.effect_base.to_string(),
                 m.type_id.to_string(),
                 crate::lookups::type_name(m.type_id).to_string(),
                 m.state_id.to_string(),
                 STATE_NAMES.get(m.state_id).to_string(),
                 m.state_miss.to_string(),
+                "0".to_string(), // Pad 3
+                "0".to_string(), // Pad 4
+                "0".to_string(), // Pad 5
+                m.ship_occasion_id.to_string(),
+                ship_occ_name.to_string(),
+                "0".to_string(), // Pad 6
+                m.ship_effect_id.to_string(),
+                ship_eff_name.to_string(),
+                m.ship_effect_sp.to_string(),
+                m.ship_effect_turns.to_string(),
+                m.ship_effect_base.to_string(),
+                m.unknown.to_string(),
+                "0".to_string(), // Pad 7
+                "0".to_string(), // Pad 8
+                "0".to_string(), // Pad 9
                 format!("0x{:x}", m.description_pos),
                 m.description_size.to_string(),
                 m.description.clone(),
+                format!("0x{:x}", m.ship_description_pos),
+                m.ship_description_size.to_string(),
+                m.ship_description.clone(),
             ])?;
         }
         

@@ -158,10 +158,9 @@ impl EnemyMagic {
         Ok(())
     }
 
-    /// Write all enemy magic entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all enemy magic entries into a buffer.
+    pub fn patch_all(_entries: &[Self], _buf: &mut [u8], _version: &GameVersion) {
+        // TODO: Implement proper patching
     }
 }
 

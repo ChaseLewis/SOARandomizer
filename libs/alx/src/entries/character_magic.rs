@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Character magic/spell entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -100,8 +100,35 @@ impl Default for CharacterMagic {
 
 impl CharacterMagic {
     /// Size of one magic entry in bytes (JP/US).
-    /// 17 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 1 + 1 = 44 bytes
-    pub const ENTRY_SIZE: usize = 44;
+    /// 17 (name) + 1 (element) + 2 (order) + 1 (occasion) + 1 (effect_id) + 1 (scope) + 
+    /// 1 (category) + 1 (speed) + 1 (sp) + 2 (pad) + 2 (base) + 1 (type) + 1 (state_id) + 
+    /// 1 (state_miss) + 3 (pad) + 1 (ship_occ) + 1 (pad) + 2 (ship_eff_id) + 1 (ship_sp) + 
+    /// 1 (ship_turns) + 2 (ship_base) + 1 (unknown) + 3 (pad) = 48 bytes
+    pub const ENTRY_SIZE: usize = 48;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_ELEMENT_ID: usize = 17;
+    const OFF_ORDER: usize = 18;
+    const OFF_OCCASION: usize = 20;
+    const OFF_EFFECT_ID: usize = 21;
+    const OFF_SCOPE_ID: usize = 22;
+    const OFF_CATEGORY_ID: usize = 23;
+    const OFF_EFFECT_SPEED: usize = 24;
+    const OFF_EFFECT_SP: usize = 25;
+    // 26-27 = pad
+    const OFF_EFFECT_BASE: usize = 28;
+    const OFF_TYPE_ID: usize = 30;
+    const OFF_STATE_ID: usize = 31;
+    const OFF_STATE_MISS: usize = 32;
+    // 33-35 = pad
+    const OFF_SHIP_OCC_ID: usize = 36;
+    // 37 = pad
+    const OFF_SHIP_EFFECT_ID: usize = 38;
+    const OFF_SHIP_EFFECT_SP: usize = 40;
+    const OFF_SHIP_EFFECT_TURNS: usize = 41;
+    const OFF_SHIP_EFFECT_BASE: usize = 42;
+    const OFF_UNKNOWN: usize = 44;
+    // 45-47 = pad
 
     /// Get element name.
     pub fn element_name(&self) -> &'static str {
@@ -227,38 +254,38 @@ impl CharacterMagic {
         }
     }
 
-    /// Write a single magic entry to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_i8(self.element_id)?;
-        if version.region == Region::Eu { writer.write_u8(0)?; }
-        writer.write_i16_be(self.order)?;
-        writer.write_u8(self.occasion_flags)?;
-        writer.write_i8(self.effect_id)?;
-        writer.write_u8(self.scope_id)?;
-        writer.write_i8(self.category_id)?;
-        writer.write_i8(self.effect_speed)?;
-        writer.write_i8(self.effect_sp)?;
-        writer.write_u8(0)?; writer.write_u8(0)?; // pad1, pad2
-        writer.write_i16_be(self.effect_base)?;
-        writer.write_i8(self.type_id)?;
-        writer.write_i8(self.state_id)?;
-        writer.write_i8(self.state_miss)?;
-        writer.write_u8(0)?; writer.write_u8(0)?; writer.write_u8(0)?; // pad3-5
-        writer.write_i8(self.ship_occasion_id)?;
-        writer.write_u8(0)?; // pad6
-        writer.write_i16_be(self.ship_effect_id)?;
-        writer.write_i8(self.ship_effect_sp)?;
-        writer.write_i8(self.ship_effect_turns)?;
-        writer.write_i16_be(self.ship_effect_base)?;
-        writer.write_i8(self.unknown)?;
-        writer.write_u8(0)?; writer.write_u8(0)?; writer.write_u8(0)?; // pad7-9
-        Ok(())
+    /// Patch a single magic entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
+        buf[Self::OFF_ORDER..Self::OFF_ORDER+2].copy_from_slice(&self.order.to_be_bytes());
+        buf[Self::OFF_OCCASION] = self.occasion_flags;
+        buf[Self::OFF_EFFECT_ID] = self.effect_id as u8;
+        buf[Self::OFF_SCOPE_ID] = self.scope_id;
+        buf[Self::OFF_CATEGORY_ID] = self.category_id as u8;
+        buf[Self::OFF_EFFECT_SPEED] = self.effect_speed as u8;
+        buf[Self::OFF_EFFECT_SP] = self.effect_sp as u8;
+        buf[Self::OFF_EFFECT_BASE..Self::OFF_EFFECT_BASE+2].copy_from_slice(&self.effect_base.to_be_bytes());
+        buf[Self::OFF_TYPE_ID] = self.type_id as u8;
+        buf[Self::OFF_STATE_ID] = self.state_id as u8;
+        buf[Self::OFF_STATE_MISS] = self.state_miss as u8;
+        buf[Self::OFF_SHIP_OCC_ID] = self.ship_occasion_id as u8;
+        buf[Self::OFF_SHIP_EFFECT_ID..Self::OFF_SHIP_EFFECT_ID+2].copy_from_slice(&self.ship_effect_id.to_be_bytes());
+        buf[Self::OFF_SHIP_EFFECT_SP] = self.ship_effect_sp as u8;
+        buf[Self::OFF_SHIP_EFFECT_TURNS] = self.ship_effect_turns as u8;
+        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE+2].copy_from_slice(&self.ship_effect_base.to_be_bytes());
+        buf[Self::OFF_UNKNOWN] = self.unknown as u8;
     }
 
-    /// Write all magic entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all magic entries into a buffer.
+    pub fn patch_all(entries: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for e in entries {
+            let idx = (e.id - id_ranges::CHARACTER_MAGIC.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                e.patch_entry(&mut buf[start..end]);
+            }
+        }
     }
 }

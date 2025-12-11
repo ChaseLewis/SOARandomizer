@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// A crew member in the game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,8 +41,19 @@ pub struct CrewMember {
 
 impl CrewMember {
     /// Size of one entry in bytes (US/JP).
-    /// 17 + 1 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 4 = 36 bytes
     pub const ENTRY_SIZE: usize = 36;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_POSITION_ID: usize = 17;
+    const OFF_TRAIT_ID: usize = 18;
+    // 19 = pad
+    const OFF_TRAIT_VALUE: usize = 20;
+    const OFF_SHIP_EFFECT_ID: usize = 22;
+    const OFF_SHIP_EFFECT_SP: usize = 23;
+    const OFF_SHIP_EFFECT_TURNS: usize = 24;
+    // 25-27 = pad
+    const OFF_SHIP_EFFECT_BASE: usize = 28;
+    const OFF_UNKNOWN: usize = 30;
 
     /// Get position name.
     pub fn position_name(&self) -> &'static str {
@@ -131,28 +142,29 @@ impl CrewMember {
         }
     }
 
-    /// Write a single crew member to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_i8(self.position_id)?;
-        if version.region == Region::Eu { writer.write_u8(0)?; }
-        writer.write_i8(self.trait_id)?;
-        writer.write_u8(0)?;
-        writer.write_i16_be(self.trait_value)?;
-        writer.write_i8(self.ship_effect_id)?;
-        writer.write_i8(self.ship_effect_sp)?;
-        writer.write_i8(self.ship_effect_turns)?;
-        writer.write_u8(0)?; writer.write_u8(0)?; writer.write_u8(0)?;
-        writer.write_i16_be(self.ship_effect_base)?;
-        writer.write_i16_be(self.unknown)?;
-        writer.write_u8(0)?; writer.write_u8(0)?; writer.write_u8(0)?; writer.write_u8(0)?;
-        Ok(())
+    /// Patch a single crew member entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_POSITION_ID] = self.position_id as u8;
+        buf[Self::OFF_TRAIT_ID] = self.trait_id as u8;
+        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE+2].copy_from_slice(&self.trait_value.to_be_bytes());
+        buf[Self::OFF_SHIP_EFFECT_ID] = self.ship_effect_id as u8;
+        buf[Self::OFF_SHIP_EFFECT_SP] = self.ship_effect_sp as u8;
+        buf[Self::OFF_SHIP_EFFECT_TURNS] = self.ship_effect_turns as u8;
+        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE+2].copy_from_slice(&self.ship_effect_base.to_be_bytes());
+        buf[Self::OFF_UNKNOWN..Self::OFF_UNKNOWN+2].copy_from_slice(&self.unknown.to_be_bytes());
     }
 
-    /// Write all crew member entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all crew member entries into a buffer.
+    pub fn patch_all(entries: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for e in entries {
+            let idx = (e.id - id_ranges::CREW_MEMBER.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                e.patch_entry(&mut buf[start..end]);
+            }
+        }
     }
 }
 

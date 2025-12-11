@@ -7,7 +7,7 @@ use super::traits::Trait;
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Weapon entry.
 /// 
@@ -81,6 +81,19 @@ impl Weapon {
     /// Size of one weapon entry in bytes (JP/US).
     /// 17 + 1 + 1 + 1 + 1 + 1 + 2 + 2 + 2 + 1 + 1 + 2 = 32 bytes
     pub const ENTRY_SIZE: usize = 32;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_CHAR_ID: usize = 17;
+    const OFF_SELL_PERCENT: usize = 18;
+    const OFF_ORDER1: usize = 19;
+    const OFF_ORDER2: usize = 20;
+    const OFF_EFFECT_ID: usize = 21;
+    const OFF_BUY_PRICE: usize = 22;
+    const OFF_ATTACK: usize = 24;
+    const OFF_HIT_PERCENT: usize = 26;
+    const OFF_TRAIT_ID: usize = 28;
+    // 29 = pad
+    const OFF_TRAIT_VALUE: usize = 30;
 
     /// Get the character name for this weapon's character ID.
     pub fn character_name(&self) -> &'static str {
@@ -173,38 +186,30 @@ impl Weapon {
         }
     }
 
-    /// Write a single weapon entry to binary data.
-    /// Note: Description fields are NOT written (stored separately).
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_i8(self.character_id)?;
-        writer.write_i8(self.sell_percent)?;
-        writer.write_i8(self.order1)?;
-        writer.write_i8(self.order2)?;
-        writer.write_i8(self.effect_id)?;
-        
-        // EU has extra padding here
-        if version.region == Region::Eu {
-            writer.write_u8(0)?;
-        }
-        
-        writer.write_u16_be(self.buy_price)?;
-        writer.write_i16_be(self.attack)?;
-        writer.write_i16_be(self.hit_percent)?;
-        
-        // Single trait
-        writer.write_i8(self.trait_data.id)?;
-        writer.write_u8(0)?; // padding
-        writer.write_i16_be(self.trait_data.value)?;
-        
-        Ok(())
+    /// Patch a single weapon entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_CHAR_ID] = self.character_id as u8;
+        buf[Self::OFF_SELL_PERCENT] = self.sell_percent as u8;
+        buf[Self::OFF_ORDER1] = self.order1 as u8;
+        buf[Self::OFF_ORDER2] = self.order2 as u8;
+        buf[Self::OFF_EFFECT_ID] = self.effect_id as u8;
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_ATTACK..Self::OFF_ATTACK+2].copy_from_slice(&self.attack.to_be_bytes());
+        buf[Self::OFF_HIT_PERCENT..Self::OFF_HIT_PERCENT+2].copy_from_slice(&self.hit_percent.to_be_bytes());
+        buf[Self::OFF_TRAIT_ID] = self.trait_data.id as u8;
+        buf[Self::OFF_TRAIT_VALUE..Self::OFF_TRAIT_VALUE+2].copy_from_slice(&self.trait_data.value.to_be_bytes());
     }
 
-    /// Write all weapon entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(weapons: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for weapon in weapons {
-            weapon.write_one(writer, version)?;
+    /// Patch all weapon entries into a buffer.
+    pub fn patch_all(weapons: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for w in weapons {
+            let idx = (w.id - id_ranges::WEAPON.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                w.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// A playable ship in the game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,8 +49,28 @@ pub struct PlayableShip {
 
 impl PlayableShip {
     /// Size of one entry in bytes (US/JP).
-    /// 20 + 4 + 2 + 2 + 2 + 2 + 2 + 2 + 12 + 10 + 6 + 4 + 4 + 4 + 2 + 2 + 2 + 2 + 2 + 2 + 12 = 100 bytes
     pub const ENTRY_SIZE: usize = 100;
+    
+    // Field offsets (name at 0-19 is NEVER written)
+    const OFF_MAX_HP: usize = 20;
+    const OFF_MAX_SP: usize = 24;
+    const OFF_SP: usize = 26;
+    const OFF_DEFENSE: usize = 28;
+    const OFF_MAG_DEF: usize = 30;
+    const OFF_QUICK: usize = 32;
+    const OFF_DODGE: usize = 34;
+    const OFF_ELEMENTS: usize = 36; // 6 * 2 bytes
+    const OFF_CANNONS: usize = 48; // 5 * 2 bytes
+    const OFF_ACCESSORIES: usize = 58; // 3 * 2 bytes
+    const OFF_VALUE: usize = 64;
+    // 68-71 = pad
+    const OFF_MAX_HP_GROWTH: usize = 72;
+    const OFF_MAX_SP_GROWTH: usize = 76;
+    const OFF_SP_GROWTH: usize = 78;
+    const OFF_DEF_GROWTH: usize = 80;
+    const OFF_MAG_DEF_GROWTH: usize = 82;
+    const OFF_QUICK_GROWTH: usize = 84;
+    const OFF_DODGE_GROWTH: usize = 86;
 
     /// Read a single ship from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, _version: &GameVersion) -> Result<Self> {
@@ -147,36 +167,47 @@ impl PlayableShip {
         Self::ENTRY_SIZE
     }
 
-    /// Write a single ship to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, _version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 20)?;
-        writer.write_u32_be(self.max_hp)?;
-        writer.write_i16_be(self.max_sp)?;
-        writer.write_i16_be(self.sp)?;
-        writer.write_i16_be(self.defense)?;
-        writer.write_i16_be(self.mag_def)?;
-        writer.write_i16_be(self.quick)?;
-        writer.write_i16_be(self.dodge)?;
-        for &e in &self.elements { writer.write_i16_be(e)?; }
-        for &c in &self.cannon_ids { writer.write_i16_be(c)?; }
-        for &a in &self.accessory_ids { writer.write_i16_be(a)?; }
-        writer.write_u32_be(self.value)?;
-        writer.write_i16_be(0)?; writer.write_i16_be(0)?;
-        writer.write_i32_be(self.max_hp_growth)?;
-        writer.write_i16_be(self.max_sp_growth)?;
-        writer.write_i16_be(self.sp_growth)?;
-        writer.write_i16_be(self.defense_growth)?;
-        writer.write_i16_be(self.mag_def_growth)?;
-        writer.write_i16_be(self.quick_growth)?;
-        writer.write_i16_be(self.dodge_growth)?;
-        for _ in 0..6 { writer.write_i16_be(0)?; }
-        Ok(())
+    /// Patch a single ship entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_MAX_HP..Self::OFF_MAX_HP+4].copy_from_slice(&self.max_hp.to_be_bytes());
+        buf[Self::OFF_MAX_SP..Self::OFF_MAX_SP+2].copy_from_slice(&self.max_sp.to_be_bytes());
+        buf[Self::OFF_SP..Self::OFF_SP+2].copy_from_slice(&self.sp.to_be_bytes());
+        buf[Self::OFF_DEFENSE..Self::OFF_DEFENSE+2].copy_from_slice(&self.defense.to_be_bytes());
+        buf[Self::OFF_MAG_DEF..Self::OFF_MAG_DEF+2].copy_from_slice(&self.mag_def.to_be_bytes());
+        buf[Self::OFF_QUICK..Self::OFF_QUICK+2].copy_from_slice(&self.quick.to_be_bytes());
+        buf[Self::OFF_DODGE..Self::OFF_DODGE+2].copy_from_slice(&self.dodge.to_be_bytes());
+        for (i, &e) in self.elements.iter().enumerate() {
+            let off = Self::OFF_ELEMENTS + i * 2;
+            buf[off..off+2].copy_from_slice(&e.to_be_bytes());
+        }
+        for (i, &c) in self.cannon_ids.iter().enumerate() {
+            let off = Self::OFF_CANNONS + i * 2;
+            buf[off..off+2].copy_from_slice(&c.to_be_bytes());
+        }
+        for (i, &a) in self.accessory_ids.iter().enumerate() {
+            let off = Self::OFF_ACCESSORIES + i * 2;
+            buf[off..off+2].copy_from_slice(&a.to_be_bytes());
+        }
+        buf[Self::OFF_VALUE..Self::OFF_VALUE+4].copy_from_slice(&self.value.to_be_bytes());
+        buf[Self::OFF_MAX_HP_GROWTH..Self::OFF_MAX_HP_GROWTH+4].copy_from_slice(&self.max_hp_growth.to_be_bytes());
+        buf[Self::OFF_MAX_SP_GROWTH..Self::OFF_MAX_SP_GROWTH+2].copy_from_slice(&self.max_sp_growth.to_be_bytes());
+        buf[Self::OFF_SP_GROWTH..Self::OFF_SP_GROWTH+2].copy_from_slice(&self.sp_growth.to_be_bytes());
+        buf[Self::OFF_DEF_GROWTH..Self::OFF_DEF_GROWTH+2].copy_from_slice(&self.defense_growth.to_be_bytes());
+        buf[Self::OFF_MAG_DEF_GROWTH..Self::OFF_MAG_DEF_GROWTH+2].copy_from_slice(&self.mag_def_growth.to_be_bytes());
+        buf[Self::OFF_QUICK_GROWTH..Self::OFF_QUICK_GROWTH+2].copy_from_slice(&self.quick_growth.to_be_bytes());
+        buf[Self::OFF_DODGE_GROWTH..Self::OFF_DODGE_GROWTH+2].copy_from_slice(&self.dodge_growth.to_be_bytes());
     }
 
-    /// Write all ship entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all ship entries into a buffer.
+    pub fn patch_all(entries: &[Self], buf: &mut [u8]) {
+        for e in entries {
+            let idx = (e.id - id_ranges::PLAYABLE_SHIP.start) as usize;
+            let start = idx * Self::ENTRY_SIZE;
+            let end = start + Self::ENTRY_SIZE;
+            if end <= buf.len() {
+                e.patch_entry(&mut buf[start..end]);
+            }
+        }
     }
 }
 

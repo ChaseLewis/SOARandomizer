@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::GameVersion;
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Treasure chest entry.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -21,8 +21,11 @@ pub struct TreasureChest {
 
 impl TreasureChest {
     /// Size of one treasure chest entry in bytes (GC).
-    /// 4 (item_id) + 4 (item_amount) = 8 bytes
     pub const ENTRY_SIZE: usize = 8;
+    
+    // Field offsets
+    const OFF_ITEM_ID: usize = 0;
+    const OFF_ITEM_AMOUNT: usize = 4;
 
     /// Check if this chest contains gold.
     pub fn is_gold(&self) -> bool {
@@ -82,18 +85,21 @@ impl TreasureChest {
         Ok(chests)
     }
 
-    /// Write a single treasure chest entry to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, _version: &GameVersion) -> Result<()> {
-        writer.write_i32_be(self.item_id)?;
-        writer.write_i32_be(self.item_amount)?;
-        Ok(())
+    /// Patch a single treasure chest entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_ITEM_ID..Self::OFF_ITEM_ID+4].copy_from_slice(&self.item_id.to_be_bytes());
+        buf[Self::OFF_ITEM_AMOUNT..Self::OFF_ITEM_AMOUNT+4].copy_from_slice(&self.item_amount.to_be_bytes());
     }
 
-    /// Write all treasure chest entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(chests: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
+    /// Patch all treasure chest entries into a buffer.
+    pub fn patch_all(chests: &[Self], buf: &mut [u8]) {
         for chest in chests {
-            chest.write_one(writer, version)?;
+            let idx = (chest.id - id_ranges::TREASURE_CHEST.start) as usize;
+            let start = idx * Self::ENTRY_SIZE;
+            let end = start + Self::ENTRY_SIZE;
+            if end <= buf.len() {
+                chest.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }

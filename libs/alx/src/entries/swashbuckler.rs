@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// A swashbuckler rating in the game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,8 +29,14 @@ pub struct Swashbuckler {
 
 impl Swashbuckler {
     /// Size of one entry in bytes (US/JP).
-    /// 25 + 1 + 2 + 2 + 2 + 2 = 34 bytes
     pub const ENTRY_SIZE: usize = 34;
+    
+    // Field offsets (name at 0-24 is NEVER written)
+    const OFF_RATING: usize = 25;
+    const OFF_REG_ATTACK: usize = 26;
+    const OFF_SUPER_ATTACK: usize = 28;
+    const OFF_DODGE: usize = 30;
+    const OFF_RUN: usize = 32;
 
     /// Read a single swashbuckler rating from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
@@ -89,33 +95,26 @@ impl Swashbuckler {
         }
     }
 
-    /// Write a single swashbuckler entry to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 25)?;
-        writer.write_u8(self.rating)?;
-        
-        if version.region == Region::Eu {
-            writer.write_u8(0)?;
-        }
-        
-        writer.write_i16_be(self.regular_attack)?;
-        writer.write_i16_be(self.super_move_attack)?;
-        writer.write_i16_be(self.dodge)?;
-        writer.write_i16_be(self.run)?;
-        
-        if version.region == Region::Eu {
-            writer.write_i16_be(0)?;
-        }
-        
-        Ok(())
+    /// Patch a single swashbuckler entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_RATING] = self.rating;
+        buf[Self::OFF_REG_ATTACK..Self::OFF_REG_ATTACK+2].copy_from_slice(&self.regular_attack.to_be_bytes());
+        buf[Self::OFF_SUPER_ATTACK..Self::OFF_SUPER_ATTACK+2].copy_from_slice(&self.super_move_attack.to_be_bytes());
+        buf[Self::OFF_DODGE..Self::OFF_DODGE+2].copy_from_slice(&self.dodge.to_be_bytes());
+        buf[Self::OFF_RUN..Self::OFF_RUN+2].copy_from_slice(&self.run.to_be_bytes());
     }
 
-    /// Write all swashbuckler entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for entry in entries {
-            entry.write_one(writer, version)?;
+    /// Patch all swashbuckler entries into a buffer.
+    pub fn patch_all(entries: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for e in entries {
+            let idx = (e.id - id_ranges::SWASHBUCKLER_GC.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                e.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }
 

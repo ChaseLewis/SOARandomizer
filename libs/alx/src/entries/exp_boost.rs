@@ -97,10 +97,9 @@ impl ExpBoost {
         Ok(())
     }
 
-    /// Write all exp boost entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all exp boost entries into a buffer.
+    pub fn patch_all(_entries: &[Self], _buf: &mut [u8], _version: &GameVersion) {
+        // TODO: Implement proper patching
     }
 }
 

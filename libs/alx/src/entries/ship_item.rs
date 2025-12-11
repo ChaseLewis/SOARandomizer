@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// A ship item (consumable) in the game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,8 +51,24 @@ pub struct ShipItem {
 
 impl ShipItem {
     /// Size of one entry in bytes (US/JP).
-    /// 17 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 2 = 36 bytes
     pub const ENTRY_SIZE: usize = 36;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_OCCASION: usize = 17;
+    const OFF_SHIP_EFFECT_ID: usize = 18;
+    const OFF_SHIP_EFFECT_TURNS: usize = 19;
+    const OFF_CONSUME: usize = 20;
+    // 21 = pad
+    const OFF_BUY_PRICE: usize = 22;
+    const OFF_SELL: usize = 24;
+    const OFF_ORDER1: usize = 25;
+    const OFF_ORDER2: usize = 26;
+    // 27 = pad
+    const OFF_SHIP_EFFECT_BASE: usize = 28;
+    const OFF_ELEMENT_ID: usize = 30;
+    const OFF_UNK1: usize = 31;
+    const OFF_UNK2: usize = 32;
+    const OFF_HIT: usize = 34;
 
     /// Read a single ship item from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
@@ -143,32 +159,34 @@ impl ShipItem {
         (self.occasion_flags & 0x01) != 0
     }
 
-    /// Write a single ship item to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_u8(self.occasion_flags)?;
-        writer.write_i8(self.ship_effect_id)?;
-        writer.write_i8(self.ship_effect_turns)?;
-        writer.write_i8(self.consume)?;
-        writer.write_u8(0)?;
-        writer.write_u16_be(self.buy_price)?;
-        writer.write_i8(self.sell_percent)?;
-        writer.write_i8(self.order1)?;
-        writer.write_i8(self.order2)?;
-        writer.write_u8(0)?;
-        if version.region == Region::Eu { writer.write_u8(0)?; writer.write_u8(0)?; }
-        writer.write_i16_be(self.ship_effect_base)?;
-        writer.write_i8(self.element_id)?;
-        writer.write_i8(self.unknown1)?;
-        writer.write_i16_be(self.unknown2)?;
-        writer.write_i16_be(self.hit)?;
-        Ok(())
+    /// Patch a single ship item entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_OCCASION] = self.occasion_flags;
+        buf[Self::OFF_SHIP_EFFECT_ID] = self.ship_effect_id as u8;
+        buf[Self::OFF_SHIP_EFFECT_TURNS] = self.ship_effect_turns as u8;
+        buf[Self::OFF_CONSUME] = self.consume as u8;
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_SELL] = self.sell_percent as u8;
+        buf[Self::OFF_ORDER1] = self.order1 as u8;
+        buf[Self::OFF_ORDER2] = self.order2 as u8;
+        buf[Self::OFF_SHIP_EFFECT_BASE..Self::OFF_SHIP_EFFECT_BASE+2].copy_from_slice(&self.ship_effect_base.to_be_bytes());
+        buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
+        buf[Self::OFF_UNK1] = self.unknown1 as u8;
+        buf[Self::OFF_UNK2..Self::OFF_UNK2+2].copy_from_slice(&self.unknown2.to_be_bytes());
+        buf[Self::OFF_HIT..Self::OFF_HIT+2].copy_from_slice(&self.hit.to_be_bytes());
     }
 
-    /// Write all ship item entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(entries: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
-        for e in entries { e.write_one(writer, version)?; }
-        Ok(())
+    /// Patch all ship item entries into a buffer.
+    pub fn patch_all(entries: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
+        for e in entries {
+            let idx = (e.id - id_ranges::SHIP_ITEM.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                e.patch_entry(&mut buf[start..end]);
+            }
+        }
     }
 }
 

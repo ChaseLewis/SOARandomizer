@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Special item entry (key items, moon crystals, etc.)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,8 +49,13 @@ impl Default for SpecialItem {
 
 impl SpecialItem {
     /// Size of one special item entry in bytes (JP/US).
-    /// 17 + 1 + 1 + 1 + 2 = 22 bytes
     pub const ENTRY_SIZE: usize = 22;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_SELL: usize = 17;
+    const OFF_ORDER1: usize = 18;
+    const OFF_ORDER2: usize = 19;
+    const OFF_BUY_PRICE: usize = 20;
 
     /// Read a single special item entry from binary data.
     pub fn read_one(cursor: &mut Cursor<&[u8]>, id: u32, version: &GameVersion) -> Result<Self> {
@@ -111,32 +116,24 @@ impl SpecialItem {
         }
     }
 
-    /// Write a single special item entry to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_i8(self.sell_percent)?;
-        writer.write_i8(self.order1)?;
-        writer.write_i8(self.order2)?;
-        
-        if version.region == Region::Eu {
-            writer.write_u8(0)?;
-        }
-        
-        writer.write_u16_be(self.buy_price)?;
-        
-        if version.region == Region::Eu {
-            writer.write_u8(0)?;
-            writer.write_u8(0)?;
-        }
-        
-        Ok(())
+    /// Patch a single special item entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_SELL] = self.sell_percent as u8;
+        buf[Self::OFF_ORDER1] = self.order1 as u8;
+        buf[Self::OFF_ORDER2] = self.order2 as u8;
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
     }
 
-    /// Write all special item entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(items: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
+    /// Patch all special item entries into a buffer.
+    pub fn patch_all(items: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
         for item in items {
-            item.write_one(writer, version)?;
+            let idx = (item.id - id_ranges::SPECIAL_ITEM.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                item.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }

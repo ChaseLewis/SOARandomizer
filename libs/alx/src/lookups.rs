@@ -295,10 +295,9 @@ pub fn category_name(id: i8) -> &'static str {
 /// Get ship occasion name by ID.
 pub fn ship_occasion_name(id: i8) -> &'static str {
     match id {
+        -1 => "None",
         0 => "Magic Cannon",
-        1 => "All PCs",
-        2 => "All ECs",
-        3 => "Unknown 3",
+        1 => "Always",
         _ => "???",
     }
 }
@@ -326,13 +325,7 @@ pub struct ShipOccasionNames;
 
 impl ShipOccasionNames {
     pub fn get(&self, id: i8) -> &'static str {
-        match id {
-            0 => "Magic Cannon",
-            1 => "All PCs",
-            2 => "All ECs",
-            3 => "Unknown 3",
-            _ => "???",
-        }
+        ship_occasion_name(id)
     }
 }
 

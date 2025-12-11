@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::game::region::{GameVersion, Region};
 use crate::game::offsets::id_ranges;
-use crate::io::{BinaryReader, BinaryWriter};
+use crate::io::BinaryReader;
 
 /// Occasion flags for when an item can be used.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -94,8 +94,23 @@ impl Default for UsableItem {
 
 impl UsableItem {
     /// Size of one usable item entry in bytes (JP/US).
-    /// 17 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 2 = 36 bytes
     pub const ENTRY_SIZE: usize = 36;
+    
+    // Field offsets (name at 0-16 is NEVER written)
+    const OFF_OCCASION: usize = 17;
+    const OFF_EFFECT_ID: usize = 18;
+    const OFF_SCOPE_ID: usize = 19;
+    const OFF_CONSUME: usize = 20;
+    const OFF_SELL: usize = 21;
+    const OFF_ORDER1: usize = 22;
+    const OFF_ORDER2: usize = 23;
+    const OFF_BUY_PRICE: usize = 24;
+    // 26-27 = pad
+    const OFF_EFFECT_BASE: usize = 28;
+    const OFF_ELEMENT_ID: usize = 30;
+    const OFF_TYPE_ID: usize = 31;
+    const OFF_STATE_ID: usize = 32;
+    const OFF_STATE_MISS: usize = 34;
 
     /// Get effect name for this item's effect ID.
     pub fn effect_name(&self) -> &'static str {
@@ -210,38 +225,33 @@ impl UsableItem {
         }
     }
 
-    /// Write a single usable item entry to binary data.
-    pub fn write_one<W: BinaryWriter>(&self, writer: &mut W, version: &GameVersion) -> Result<()> {
-        writer.write_string_fixed(&self.name, 17)?;
-        writer.write_u8(self.occasion_flags.0)?;
-        writer.write_i8(self.effect_id)?;
-        writer.write_u8(self.scope_id)?;
-        writer.write_i8(self.consume_percent)?;
-        writer.write_i8(self.sell_percent)?;
-        writer.write_i8(self.order1)?;
-        writer.write_i8(self.order2)?;
-        
-        if version.region == Region::Eu {
-            writer.write_u8(0)?;
-        }
-        
-        writer.write_u16_be(self.buy_price)?;
-        writer.write_u8(0)?; // pad1
-        writer.write_u8(0)?; // pad2
-        writer.write_i16_be(self.effect_base)?;
-        writer.write_i8(self.element_id)?;
-        writer.write_i8(self.type_id)?;
-        writer.write_i16_be(self.state_id)?;
-        writer.write_i16_be(self.state_miss)?;
-        
-        Ok(())
+    /// Patch a single usable item entry in a mutable buffer.
+    pub fn patch_entry(&self, buf: &mut [u8]) {
+        buf[Self::OFF_OCCASION] = self.occasion_flags.0;
+        buf[Self::OFF_EFFECT_ID] = self.effect_id as u8;
+        buf[Self::OFF_SCOPE_ID] = self.scope_id;
+        buf[Self::OFF_CONSUME] = self.consume_percent as u8;
+        buf[Self::OFF_SELL] = self.sell_percent as u8;
+        buf[Self::OFF_ORDER1] = self.order1 as u8;
+        buf[Self::OFF_ORDER2] = self.order2 as u8;
+        buf[Self::OFF_BUY_PRICE..Self::OFF_BUY_PRICE+2].copy_from_slice(&self.buy_price.to_be_bytes());
+        buf[Self::OFF_EFFECT_BASE..Self::OFF_EFFECT_BASE+2].copy_from_slice(&self.effect_base.to_be_bytes());
+        buf[Self::OFF_ELEMENT_ID] = self.element_id as u8;
+        buf[Self::OFF_TYPE_ID] = self.type_id as u8;
+        buf[Self::OFF_STATE_ID..Self::OFF_STATE_ID+2].copy_from_slice(&self.state_id.to_be_bytes());
+        buf[Self::OFF_STATE_MISS..Self::OFF_STATE_MISS+2].copy_from_slice(&self.state_miss.to_be_bytes());
     }
 
-    /// Write all usable item entries to binary data.
-    pub fn write_all_data<W: BinaryWriter>(items: &[Self], writer: &mut W, version: &GameVersion) -> Result<()> {
+    /// Patch all usable item entries into a buffer.
+    pub fn patch_all(items: &[Self], buf: &mut [u8], version: &GameVersion) {
+        let entry_size = Self::entry_size_for_version(version);
         for item in items {
-            item.write_one(writer, version)?;
+            let idx = (item.id - id_ranges::USABLE_ITEM.start) as usize;
+            let start = idx * entry_size;
+            let end = start + entry_size;
+            if end <= buf.len() {
+                item.patch_entry(&mut buf[start..end]);
+            }
         }
-        Ok(())
     }
 }
