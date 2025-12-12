@@ -1,6 +1,6 @@
 //! ENP (Enemy Parameters) and EVP (Enemy Event) file parsers.
 
-use crate::entries::{Enemy, EnemyTask};
+use crate::entries::{Enemy, EnemyEncounter, EnemyTask};
 use crate::error::{Error, Result};
 use crate::game::region::GameVersion;
 use crate::io::BinaryReader;
@@ -14,6 +14,9 @@ const MAX_ENEMIES: usize = 84;
 
 /// Maximum number of tasks per enemy (GC)
 const MAX_TASKS: usize = 64;
+
+/// Maximum number of encounters per ENP segment (GC)
+const MAX_ENCOUNTERS: usize = 32;
 
 /// Maximum number of enemy slots in EVP header (GC)
 const EVP_MAX_ENEMIES: usize = 200;
@@ -38,6 +41,8 @@ pub struct EnpData {
     pub enemies: Vec<Enemy>,
     /// All enemy tasks parsed from the file  
     pub tasks: Vec<EnemyTask>,
+    /// All enemy encounters parsed from the file
+    pub encounters: Vec<EnemyEncounter>,
 }
 
 /// Parse an ENP file from raw bytes.
@@ -110,11 +115,12 @@ fn parse_enp_segment(
     let mut cursor = Cursor::new(data);
 
     // Read header - array of (enemy_id: i32, position: i32) pairs
-    // Read until we hit invalid entry or run out of data
+    // Read EXACTLY MAX_ENEMIES entries (matching Ruby ALX behavior)
+    // This is important because encounters start right after the fixed header
     let mut nodes = Vec::new();
-    let header_max = MAX_ENEMIES.min(data.len() / 8);
+    let header_entries = MAX_ENEMIES.min(data.len() / 8);
 
-    for _ in 0..header_max {
+    for _ in 0..header_entries {
         if cursor.position() as usize + 8 > data.len() {
             break;
         }
@@ -127,14 +133,40 @@ fn parse_enp_segment(
                 id: id as u32,
                 pos: pos as usize,
             });
-        } else if id < 0 {
-            // Negative ID marks end of header (usually 0xFFFFFFFF)
-            break;
         }
+        // Note: We don't break on negative ID - we read all MAX_ENEMIES entries
+        // because encounters start at a fixed offset after the header
     }
 
     if nodes.is_empty() {
         return Ok(());
+    }
+
+    // Read encounters - between header and first enemy position
+    // The header is MAX_ENEMIES × 8 bytes, so encounters start at that offset
+    let header_size = header_entries * 8;
+    let first_enemy_pos = nodes.iter().map(|n| n.pos).min().unwrap_or(data.len());
+
+    // Calculate how many encounters fit between header end and first enemy
+    if first_enemy_pos > header_size {
+        let encounter_space = first_enemy_pos - header_size;
+        let num_encounters = (encounter_space / EnemyEncounter::ENTRY_SIZE).min(MAX_ENCOUNTERS);
+
+        // Position cursor at end of header (start of encounters)
+        cursor.set_position(header_size as u64);
+
+        for encounter_id in 0..num_encounters {
+            if cursor.position() as usize + EnemyEncounter::ENTRY_SIZE > first_enemy_pos {
+                break;
+            }
+
+            match EnemyEncounter::read_one(&mut cursor, encounter_id as u32, filename) {
+                Ok(encounter) => {
+                    result.encounters.push(encounter);
+                }
+                Err(_) => break,
+            }
+        }
     }
 
     // Read each enemy from their positions
@@ -347,11 +379,19 @@ pub fn parse_evp(data: &[u8], filename: &str, version: &GameVersion) -> Result<E
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_constants() {
-        assert_eq!(super::MAX_ENEMIES, 84);
-        assert_eq!(super::MAX_TASKS, 64);
-        assert_eq!(super::EVP_MAX_ENEMIES, 200);
-        assert_eq!(super::EVP_MAX_EVENTS, 250);
+        assert_eq!(MAX_ENEMIES, 84);
+        assert_eq!(MAX_TASKS, 64);
+        assert_eq!(MAX_ENCOUNTERS, 32);
+        assert_eq!(EVP_MAX_ENEMIES, 200);
+        assert_eq!(EVP_MAX_EVENTS, 250);
+    }
+
+    #[test]
+    fn test_encounter_entry_size() {
+        assert_eq!(EnemyEncounter::ENTRY_SIZE, 10);
     }
 }

@@ -5,10 +5,10 @@ use std::path::Path;
 use super::offsets::Offsets;
 use super::region::GameVersion;
 use crate::entries::{
-    Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy, EnemyMagic,
-    EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve, MagicExpCurve, PlayableShip,
-    ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem, SpiritCurve, Swashbuckler,
-    TreasureChest, UsableItem, Weapon, WeaponEffect,
+    Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy,
+    EnemyEncounter, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve,
+    MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem,
+    SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
 };
 use crate::error::{Error, Result};
 use crate::io::{decompress_aklz, parse_dat_file, parse_enp, parse_evp};
@@ -1116,6 +1116,42 @@ impl GameRoot {
         }
 
         Ok((all_enemies, all_tasks))
+    }
+
+    /// Read all enemy encounters from ENP files in the ISO.
+    ///
+    /// Enemy encounters define battle formations - which enemies appear together
+    /// in a given battle, along with initiative and magic exp values.
+    pub fn read_enemy_encounters(&mut self) -> Result<Vec<EnemyEncounter>> {
+        let mut all_encounters: Vec<EnemyEncounter> = Vec::new();
+
+        // Read ENP files (*_ep.enp) - field encounters
+        let enp_files = self.iso.list_files_matching("_ep.enp")?;
+
+        for entry in &enp_files {
+            let raw_data = self.iso.read_file_direct(entry)?;
+            let data = decompress_aklz(&raw_data)?;
+
+            let filename = entry
+                .path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "*".to_string());
+
+            let parsed = parse_enp(&data, &filename, &self.version)?;
+            all_encounters.extend(parsed.encounters);
+        }
+
+        // Sort by filter (filename) then by ID
+        all_encounters.sort_by(|a, b| {
+            let filter_cmp = a.filter.cmp(&b.filter);
+            if filter_cmp != std::cmp::Ordering::Equal {
+                return filter_cmp;
+            }
+            a.id.cmp(&b.id)
+        });
+
+        Ok(all_encounters)
     }
 }
 

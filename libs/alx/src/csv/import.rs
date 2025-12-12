@@ -4,9 +4,10 @@ use std::io::Read;
 
 use crate::entries::{
     Accessory, Armor, Character, CharacterFlags, CharacterMagic, CharacterSuperMove, CrewMember,
-    EnemyMagic, EnemyShip, EnemySuperMove, ExpBoost, ExpCurve, MagicExpCurve, OccasionFlags,
-    PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem, SpiritCurve, SpiritLevel,
-    Swashbuckler, Trait, TreasureChest, UsableItem, Weapon,
+    EnemyEncounter, EnemyMagic, EnemyShip, EnemySuperMove, EnemySlot, ExpBoost, ExpCurve,
+    MagicExpCurve, OccasionFlags, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop,
+    SpecialItem, SpiritCurve, SpiritLevel, Swashbuckler, Trait, TreasureChest, UsableItem, Weapon,
+    MAX_ENEMY_SLOTS,
 };
 use crate::error::{Error, Result};
 
@@ -1229,5 +1230,73 @@ impl CsvImporter {
         }
 
         Ok(curves)
+    }
+
+    /// Import enemy encounters from CSV, merging with existing data.
+    ///
+    /// CSV columns (matching export):
+    /// 0: Entry ID, 1: [Filter], 2: Initiative, 3: Magic EXP,
+    /// 4-27: EC1-8 data (ID, JP Name, US Name) × 8 = 24 columns
+    ///
+    /// Note: This creates new encounters if they don't exist in `existing`,
+    /// since encounters are keyed by (Entry ID, Filter).
+    pub fn import_enemy_encounters<R: Read>(
+        reader: R,
+        existing: &[EnemyEncounter],
+    ) -> Result<Vec<EnemyEncounter>> {
+        let mut rdr = csv::Reader::from_reader(reader);
+        let mut encounters: Vec<EnemyEncounter> = existing.to_vec();
+
+        // Build a map for quick lookup by (id, filter)
+        use std::collections::HashMap;
+        let mut index_map: HashMap<(u32, String), usize> = HashMap::new();
+        for (idx, enc) in encounters.iter().enumerate() {
+            index_map.insert((enc.id, enc.filter.clone()), idx);
+        }
+
+        for result in rdr.records() {
+            let record = result.map_err(|e| Error::ParseError {
+                offset: 0,
+                message: format!("CSV parse error: {}", e),
+            })?;
+
+            let id: u32 = parse_or_default(record.get(0).unwrap_or("0"));
+            let filter = record.get(1).unwrap_or("").to_string();
+            let initiative: u8 = parse_or_default(record.get(2).unwrap_or("0"));
+            let magic_exp: u8 = parse_or_default(record.get(3).unwrap_or("0"));
+
+            // Read enemy slots (8 slots, 3 columns each: ID, JP Name, US Name)
+            // We only need the ID, names are looked up
+            let mut enemy_slots: [EnemySlot; MAX_ENEMY_SLOTS] =
+                std::array::from_fn(|_| EnemySlot::default());
+
+            for i in 0..MAX_ENEMY_SLOTS {
+                let base = 4 + i * 3; // EC1 ID at column 4, EC2 ID at column 7, etc.
+                enemy_slots[i].enemy_id = parse_or_default(record.get(base).unwrap_or("255"));
+            }
+
+            // Check if this encounter exists
+            let key = (id, filter.clone());
+            if let Some(&idx) = index_map.get(&key) {
+                // Update existing encounter
+                let enc = &mut encounters[idx];
+                enc.initiative = initiative;
+                enc.magic_exp = magic_exp;
+                enc.enemy_slots = enemy_slots;
+            } else {
+                // Create new encounter
+                let new_enc = EnemyEncounter {
+                    id,
+                    filter: filter.clone(),
+                    initiative,
+                    magic_exp,
+                    enemy_slots,
+                };
+                index_map.insert(key, encounters.len());
+                encounters.push(new_enc);
+            }
+        }
+
+        Ok(encounters)
     }
 }

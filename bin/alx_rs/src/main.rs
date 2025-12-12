@@ -499,6 +499,25 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
         }
     }
 
+    // Import enemy encounters (merge with existing)
+    // Note: Encounters are read from ENP files but writing back is not yet supported
+    // This import parses the CSV but doesn't write back (ENP writing not implemented)
+    {
+        let path = import_dir.join("enemyencounter.csv");
+        if path.exists() {
+            print!("Importing enemy encounters...");
+            let existing = game.read_enemy_encounters()?;
+            let file = File::open(&path)?;
+            let reader = BufReader::new(file);
+            let data = CsvImporter::import_enemy_encounters(reader, &existing)?;
+            println!(" {} entries (note: writing back to ENP files not yet supported)", data.len());
+            // TODO: Implement writing encounters back to ENP files
+            // game.write_enemy_encounters(&data)?;
+        } else {
+            println!("Skipping enemy encounters (file not found)");
+        }
+    }
+
     // Import swashbucklers
     if let Some(data) = import_csv!(
         import_dir,
@@ -772,6 +791,26 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
     )?;
     CsvExporter::export_enemy_tasks(&tasks, File::create(output_dir.join("enemytask.csv"))?)?;
     println!(" {} enemies, {} tasks", enemies.len(), tasks.len());
+
+    // Enemy encounters (from ENP files)
+    print!("Exporting enemy encounters...");
+    let encounters = game.read_enemy_encounters()?;
+    // Build enemy name lookup map for encounters (id -> (jp_name, us_name))
+    let mut encounter_enemy_names: std::collections::HashMap<u32, (String, String)> =
+        std::collections::HashMap::new();
+    for enemy in &enemies {
+        let us_name = enemy_names
+            .get(&enemy.id)
+            .cloned()
+            .unwrap_or_else(|| "???".to_string());
+        encounter_enemy_names.insert(enemy.id, (enemy.name_jp.clone(), us_name));
+    }
+    CsvExporter::export_enemy_encounters(
+        &encounters,
+        File::create(output_dir.join("enemyencounter.csv"))?,
+        &encounter_enemy_names,
+    )?;
+    println!(" {} encounters", encounters.len());
 
     Ok(())
 }

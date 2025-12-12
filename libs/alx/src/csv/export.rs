@@ -3,10 +3,10 @@
 use std::io::Write;
 
 use crate::entries::{
-    Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy, EnemyMagic,
-    EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve, MagicExpCurve, PlayableShip,
-    ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem, SpiritCurve, Swashbuckler,
-    TreasureChest, UsableItem, Weapon, WeaponEffect, TRAIT_NAMES,
+    Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy,
+    EnemyEncounter, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve,
+    MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem,
+    SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect, TRAIT_NAMES,
 };
 use crate::error::Result;
 use crate::items::ItemDatabase;
@@ -1913,6 +1913,66 @@ impl CsvExporter {
             for &exp in &curve.silver_exp {
                 row.push(exp.to_string());
             }
+            wtr.write_record(&row)?;
+        }
+
+        wtr.flush()?;
+        Ok(())
+    }
+
+    /// Export enemy encounters to CSV format matching original ALX output.
+    ///
+    /// The `enemy_names` map is used to look up enemy names by ID.
+    /// Format: Entry ID, [Filter], Initiative, Magic EXP, EC1-8 ID, [EC1-8 JP Name], [EC1-8 US Name]
+    pub fn export_enemy_encounters<W: Write>(
+        encounters: &[EnemyEncounter],
+        writer: W,
+        enemy_names: &std::collections::HashMap<u32, (String, String)>,
+    ) -> Result<()> {
+        let mut wtr = csv::Writer::from_writer(writer);
+
+        // Build header matching original ALX format
+        let mut header = vec![
+            "Entry ID".to_string(),
+            "[Filter]".to_string(),
+            "Initiative".to_string(),
+            "Magic EXP".to_string(),
+        ];
+
+        // Add columns for each enemy slot (8 slots)
+        for i in 1..=8 {
+            header.push(format!("EC{} ID", i));
+            header.push(format!("[EC{} JP Name]", i));
+            header.push(format!("[EC{} US Name]", i));
+        }
+
+        wtr.write_record(&header)?;
+
+        for enc in encounters {
+            let mut row = vec![
+                enc.id.to_string(),
+                enc.filter.clone(),
+                enc.initiative.to_string(),
+                enc.magic_exp.to_string(),
+            ];
+
+            // Add enemy slot data
+            for slot in &enc.enemy_slots {
+                row.push(slot.enemy_id.to_string());
+
+                // Look up enemy names
+                if slot.enemy_id == 255 {
+                    row.push("None".to_string());
+                    row.push("None".to_string());
+                } else if let Some((jp_name, us_name)) = enemy_names.get(&(slot.enemy_id as u32)) {
+                    row.push(jp_name.clone());
+                    row.push(us_name.clone());
+                } else {
+                    row.push("???".to_string());
+                    row.push("???".to_string());
+                }
+            }
+
             wtr.write_record(&row)?;
         }
 
