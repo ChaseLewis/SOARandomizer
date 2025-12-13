@@ -11,7 +11,10 @@ use crate::entries::{
     SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
 };
 use crate::error::{Error, Result};
-use crate::io::{decompress_aklz, parse_dat_file, parse_enp, parse_evp};
+use crate::io::{
+    compress_aklz, decompress_aklz, is_aklz, parse_dat_file, parse_enp, parse_evp,
+    patch_enp_encounters,
+};
 use crate::io::{read_description_strings, IsoFile};
 use crate::items::ItemDatabase;
 
@@ -1153,9 +1156,71 @@ impl GameRoot {
 
         Ok(all_encounters)
     }
+
+    /// Write enemy encounters back to ENP files in the ISO.
+    ///
+    /// This groups encounters by their filter (filename) and writes them
+    /// back to the corresponding ENP files.
+    ///
+    /// If the original file was AKLZ compressed, the output will also be compressed.
+    pub fn write_enemy_encounters(&mut self, encounters: &[EnemyEncounter]) -> Result<()> {
+        use std::collections::HashMap;
+
+        // Group encounters by filter (filename)
+        let mut by_file: HashMap<String, Vec<&EnemyEncounter>> = HashMap::new();
+        for enc in encounters {
+            by_file.entry(enc.filter.clone()).or_default().push(enc);
+        }
+
+        // Process each file
+        for (filename, file_encounters) in &by_file {
+            // Sort encounters by ID to ensure correct order
+            let mut sorted_encounters: Vec<EnemyEncounter> =
+                file_encounters.iter().map(|e| (*e).clone()).collect();
+            sorted_encounters.sort_by_key(|e| e.id);
+
+            // Find the ENP file in the ISO
+            let pattern = filename.replace(".enp", "");
+            let matching_files = self.iso.list_files_matching(&pattern)?;
+
+            for entry in matching_files {
+                // Check if this is the right file
+                let entry_filename = entry
+                    .path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                if entry_filename != *filename {
+                    continue;
+                }
+
+                // Read the original file
+                let raw_data = self.iso.read_file_direct(&entry)?;
+                let was_compressed = is_aklz(&raw_data);
+                let data = decompress_aklz(&raw_data)?;
+
+                // Patch encounters
+                let patched = patch_enp_encounters(&data, &sorted_encounters);
+
+                // Re-compress if original was compressed
+                let output = if was_compressed {
+                    compress_aklz(&patched)
+                } else {
+                    patched
+                };
+
+                self.iso.write_file(&entry.path, &output)?;
+            }
+        }
+
+        Ok(())
+    }
+
 }
 
 #[cfg(test)]
 mod tests {
     // Integration tests would go here
 }
+

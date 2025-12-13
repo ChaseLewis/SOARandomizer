@@ -1822,30 +1822,213 @@ impl CsvExporter {
         Ok(())
     }
 
-    /// Export enemy tasks to CSV format.
-    pub fn export_enemy_tasks<W: Write>(tasks: &[EnemyTask], writer: W) -> Result<()> {
+    /// Export enemy tasks to CSV format matching Ruby ALX output.
+    ///
+    /// # Arguments
+    /// * `tasks` - The enemy tasks to export
+    /// * `enemies` - List of enemies for name lookups
+    /// * `enemy_magic` - HashMap of enemy magic (id -> name) for action name lookups
+    /// * `enemy_super_moves` - HashMap of enemy super moves (id -> name) for action name lookups
+    /// * `writer` - Output writer
+    pub fn export_enemy_tasks<W: Write>(
+        tasks: &[EnemyTask],
+        enemies: &[crate::entries::Enemy],
+        enemy_magic: &std::collections::HashMap<u32, String>,
+        enemy_super_moves: &std::collections::HashMap<u32, String>,
+        writer: W,
+    ) -> Result<()> {
+        use crate::lookups::{
+            action_name, action_param_name, branch_name, branch_param_name, enemy_name,
+        };
+        use std::collections::HashMap;
+
         let mut wtr = csv::Writer::from_writer(writer);
 
+        // Header matching Ruby ALX format
         wtr.write_record([
-            "Task ID",
+            "Entry ID",
             "[Filter]",
-            "Enemy ID",
+            "[EC ID]",
+            "[EC JP Name]",
+            "[EC US Name]",
             "Type ID",
             "[Type Name]",
             "Task ID",
+            "[Task Name]",
             "Param ID",
+            "[Param Name]",
         ])?;
 
-        for t in tasks {
-            wtr.write_record(&[
-                t.id.to_string(),
-                t.filter.clone(),
-                t.enemy_id.to_string(),
-                t.type_id.to_string(),
-                t.type_name().to_string(),
-                t.task_id.to_string(),
-                t.param_id.to_string(),
-            ])?;
+        // Build enemy name lookup from enemies list
+        let mut enemy_jp_names: HashMap<u32, String> = HashMap::new();
+        let mut enemy_us_names: HashMap<u32, String> = HashMap::new();
+        for e in enemies {
+            if !enemy_jp_names.contains_key(&e.id) {
+                enemy_jp_names.insert(e.id, e.name_jp.clone());
+                // Use vocabulary lookup for US name
+                enemy_us_names.insert(e.id, enemy_name(e.id).to_string());
+            }
+        }
+
+        // Aggregate tasks: group by (enemy_id, task sequence) and use "*" for identical tasks
+        // Key insight: tasks from ENP/EVP with identical content are merged into "*"
+        // Tasks from DAT files with different content are kept separate
+
+        // First, group tasks by enemy_id and filter
+        let mut task_groups: HashMap<(u32, String), Vec<&EnemyTask>> = HashMap::new();
+        for task in tasks {
+            task_groups
+                .entry((task.enemy_id, task.filter.clone()))
+                .or_default()
+                .push(task);
+        }
+
+        // Helper to compute task sequence signature for comparison
+        fn task_signature(tasks: &[&EnemyTask]) -> String {
+            tasks
+                .iter()
+                .map(|t| format!("{}:{}:{}:{}", t.id, t.type_id, t.task_id, t.param_id))
+                .collect::<Vec<_>>()
+                .join("|")
+        }
+
+        // Helper to determine filter priority (ENP=0, EVP=1, DAT=2)
+        fn filter_priority(f: &str) -> u8 {
+            if f == "*" || f.ends_with(".enp") {
+                0
+            } else if f.ends_with(".evp") {
+                1
+            } else {
+                2 // DAT files
+            }
+        }
+
+        // Group by enemy_id
+        let mut by_enemy: HashMap<u32, Vec<(String, Vec<&EnemyTask>)>> = HashMap::new();
+        for ((enemy_id, filter), task_list) in task_groups {
+            by_enemy
+                .entry(enemy_id)
+                .or_default()
+                .push((filter, task_list));
+        }
+
+        // Process each enemy - group by task signature
+        let mut output_tasks: Vec<(u32, String, Vec<&EnemyTask>)> = Vec::new();
+
+        for (enemy_id, filter_groups) in by_enemy {
+            // Group by task signature to find identical sequences
+            let mut by_signature: HashMap<String, Vec<(String, Vec<&EnemyTask>)>> = HashMap::new();
+
+            for (filter, tasks) in filter_groups {
+                let sig = task_signature(&tasks);
+                by_signature
+                    .entry(sig)
+                    .or_default()
+                    .push((filter, tasks));
+            }
+
+            // For each unique signature, determine the filter
+            for (_sig, mut filters_with_tasks) in by_signature {
+                // Sort by priority (ENP/EVP first)
+                filters_with_tasks.sort_by(|(a, _), (b, _)| {
+                    filter_priority(a)
+                        .cmp(&filter_priority(b))
+                        .then(a.cmp(b))
+                });
+
+                // Get the best filter (lowest priority = ENP/EVP)
+                let (best_filter, tasks) = filters_with_tasks.remove(0);
+
+                // Determine output filter:
+                // - If from ENP/EVP (or multiple files), use "*"
+                // - If only from DAT, use the DAT filename
+                let has_enp_evp =
+                    filter_priority(&best_filter) <= 1 || filters_with_tasks.len() > 0;
+                let output_filter = if has_enp_evp {
+                    "*".to_string()
+                } else {
+                    best_filter
+                };
+
+                output_tasks.push((enemy_id, output_filter, tasks));
+            }
+        }
+
+        // Sort output by enemy_id, then filter, then task id
+        output_tasks.sort_by(|(a_eid, a_filter, _), (b_eid, b_filter, _)| {
+            a_eid.cmp(b_eid).then_with(|| {
+                // "*" comes first
+                if a_filter == "*" && b_filter != "*" {
+                    std::cmp::Ordering::Less
+                } else if a_filter != "*" && b_filter == "*" {
+                    std::cmp::Ordering::Greater
+                } else {
+                    a_filter.cmp(b_filter)
+                }
+            })
+        });
+
+        // Write tasks
+        for (enemy_id, filter, task_list) in output_tasks {
+            let jp_name = enemy_jp_names
+                .get(&enemy_id)
+                .cloned()
+                .unwrap_or_else(|| "???".to_string());
+            let us_name = enemy_us_names
+                .get(&enemy_id)
+                .cloned()
+                .unwrap_or_else(|| "???".to_string());
+
+            for task in task_list {
+                // Get task name
+                let task_name = match task.type_id {
+                    0 => branch_name(task.task_id).to_string(),
+                    1 => {
+                        // Action - check for built-in actions or look up from magic/super moves
+                        let builtin = action_name(task.task_id);
+                        if !builtin.is_empty() {
+                            builtin.to_string()
+                        } else if task.task_id >= 500 {
+                            // Magic (500-549)
+                            let magic_id = (task.task_id - 500) as u32;
+                            enemy_magic
+                                .get(&magic_id)
+                                .cloned()
+                                .unwrap_or_else(|| "???".to_string())
+                        } else if task.task_id >= 0 {
+                            // Super move (0-499)
+                            enemy_super_moves
+                                .get(&(task.task_id as u32))
+                                .cloned()
+                                .unwrap_or_else(|| "???".to_string())
+                        } else {
+                            "???".to_string()
+                        }
+                    }
+                    _ => "None".to_string(),
+                };
+
+                // Get param name
+                let param_name = match task.type_id {
+                    0 => branch_param_name(task.param_id),
+                    1 => action_param_name(task.param_id).to_string(),
+                    _ => "None".to_string(),
+                };
+
+                wtr.write_record(&[
+                    task.id.to_string(),
+                    filter.clone(),
+                    enemy_id.to_string(),
+                    jp_name.clone(),
+                    us_name.clone(),
+                    task.type_id.to_string(),
+                    task.type_name().to_string(),
+                    task.task_id.to_string(),
+                    task_name,
+                    task.param_id.to_string(),
+                    param_name,
+                ])?;
+            }
         }
 
         wtr.flush()?;

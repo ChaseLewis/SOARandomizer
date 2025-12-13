@@ -533,6 +533,196 @@ pub fn enemy_names_map() -> std::collections::HashMap<u32, String> {
     map
 }
 
+/// Get task type name (for enemy tasks).
+pub fn task_type_name(type_id: i16) -> &'static str {
+    match type_id {
+        0 => "Branch",
+        1 => "Action",
+        _ => "???",
+    }
+}
+
+/// Get branch condition name by ID.
+/// These are the condition types used in enemy AI task branching.
+pub fn branch_name(id: i16) -> &'static str {
+    match id {
+        0 => "HP = 100%",
+        1 => "HP < 50%",
+        2 => "HP < 25%",
+        3 => "HP < 10%",
+        4 => "Got Hit?",
+        5 => "Got Hit by Spell?",
+        6 => "Any PC Distance > 2",
+        7 => "Any PC Distance > 3",
+        8 => "Any PC Distance ≥ 2",
+        9 => "Any PC Distance ≥ 3",
+        10 => "Any PC Distance > 3",
+        11 => "Turn 1",
+        12 => "Turn 2",
+        13 => "Turn 3",
+        14 => "Turn 4",
+        15 => "Turn 8",
+        16 => "Has Silence?",
+        17 => "ECs Alive = 1",
+        18 => "SP = 100%",
+        19 => "SP ≤ 50%",
+        20 => "SP ≤ 25%",
+        21 => "Rating 10%",
+        22 => "Rating 20%",
+        23 => "Rating 30%",
+        24 => "Rating 40%",
+        25 => "Rating 50%",
+        26 => "Rating 60%",
+        27 => "Rating 70%",
+        28 => "Rating 80%",
+        29 => "Rating 90%",
+        30 => "Always",
+        31 => "Used Sacri Spells ≥ 1",
+        32 => "Used Sacri Spells ≥ 2",
+        33 => "Used Attack Spells ≥ 1",
+        34 => "Used Attack Spells ≥ 2",
+        35 => "Used State Spells ≥ 1",
+        36 => "Used State Spells ≥ 2",
+        37 => "Turn ≥ 5",
+        38 => "Any EC HP < 50%",
+        39 => "Any EC HP < 25%",
+        40 => "Used Gather Strength?",
+        41 => "Used Tremble?",
+        42 => "Used Sacri Crystals ≥ 1",
+        43 => "Used Sacri Crystals ≥ 2",
+        44 => "1st PC ΔLevel > 3",
+        45 => "1st PC ΔLevel > 7",
+        46 => "Used HP Absorbs ≥ 1",
+        47 => "Used HP Absorbs ≥ 2",
+        48 => "Used Target Search?",
+        49 => "Used Spell?",
+        50 => "Used S-Move?",
+        51 => "Used Focus?",
+        52 => "Used Charge?",
+        53 => "Used Engage?",
+        54 => "ECs Alive ≤ 3",
+        55 => "Used Digest?",
+        56 => "All PCs Have Weak?",
+        57 => "Any PC Has Strengthen?",
+        58 => "Any PC Has Quickened?",
+        59 => "Any PC Has Regenerate?",
+        60 => "Turns Since Destruction ≤ 2",
+        61 => "Has No Regenerate?",
+        62 => "PCs Alive = 1",
+        63 => "PCs Alive = 2",
+        64 => "PCs Alive = 3",
+        65 => "PCs Alive = 4",
+        66 => "ECs Alive = 3",
+        67 => "Used Legendary Charge?",
+        68 => "Used Target Search?",
+        69 => "EC Slots < 8 and Danger ≤ 3000",
+        _ => "???",
+    }
+}
+
+/// Get branch param name (typically "Go to X" for branching).
+pub fn branch_param_name(id: i16) -> String {
+    if id == -1 {
+        "None".to_string()
+    } else {
+        format!("Go to {}", id)
+    }
+}
+
+/// Get action name by ID for enemy tasks.
+/// IDs 550+ are built-in actions, lower IDs are super moves/magic.
+pub fn action_name(id: i16) -> &'static str {
+    match id {
+        550 => "Attack",
+        551 => "Guard",
+        552 => "Run",
+        _ => "",  // Empty means look up from magic/super moves
+    }
+}
+
+/// Get action param (target) name by ID.
+pub fn action_param_name(id: i16) -> &'static str {
+    match id {
+        -1 => "None",
+        0 => "Furthest PC",
+        1 => "Nearest PC",
+        2 => "Random PC",
+        3 => "PC With Highest HP",
+        4 => "PC With Lowest HP",
+        5 => "Random EC",
+        6 => "EC With Highest HP",
+        7 => "EC With Lowest HP",
+        8 => "EC With Highest Attack",
+        9 => "EC With Highest Defense",
+        10 => "EC With Highest Quick",
+        11 => "EC W/O Strengthen",
+        12 => "Nearest PC/EC",
+        13 => "PC W/O Stone",
+        14 => "PC W/O Confusion",
+        15 => "PC W/O Silence",
+        16 => "PC W/O Sleep",
+        17 => "PC W/O Weak",
+        18 => "PC W/O Fatigue",
+        19 => "PC W/O Poison",
+        20 => "PC W/O Silence but Highest Will",
+        21 => "PC W/O Weak but Highest Attack",
+        22 => "Self",
+        23 => "Aika",
+        24 => "PC W/O Stone",
+        _ => "???",
+    }
+}
+
+/// Get item name by ID.
+/// These are the US item names from the game vocabulary.
+pub fn item_name(id: u32) -> String {
+    match id {
+        // Healing items (240-255)
+        240 => "Sacri Crystal".to_string(),
+        241 => "Sacri Box".to_string(),
+        242 => "Sacres Crystal".to_string(),
+        243 => "Sacrum Crystal".to_string(),
+        244 => "Curia Crystal".to_string(),
+        245 => "Risan Crystal".to_string(),
+        246 => "Riselem Crystal".to_string(),
+        247 => "Sylenis Box".to_string(),
+        248 => "Pyri Box".to_string(),
+        249 => "Pyrum Box".to_string(),
+        250 => "Paranta Seed".to_string(),
+        251 => "Vidal Seed".to_string(),
+        252 => "Glyph of Might".to_string(),
+        253 => "Glyph of Speed".to_string(),
+        254 => "Aura of Valor".to_string(),
+        255 => "Dew of Serene".to_string(),
+        // Stat boosters (256-267)
+        256 => "Moonberry".to_string(),
+        257 => "Chom".to_string(),
+        258 => "Gold".to_string(),
+        259 => "Magic Droplet".to_string(),
+        260 => "Crystales Box".to_string(),
+        261 => "Abirik Cham".to_string(),
+        262 => "Moonlight Robe".to_string(),
+        263 => "Sky Fang".to_string(),
+        264 => "Icyl Seed".to_string(),
+        265 => "Complete Kit".to_string(),
+        266 => "Repair Kit".to_string(),
+        267 => "Slipara Box".to_string(),
+        // More items
+        273 => "Healing Salve".to_string(),
+        274 => "Magic Dew".to_string(),
+        // Discovery items
+        300 => "Cham".to_string(),
+        // Weapons
+        0..=50 => format!("Weapon_{}", id),
+        // Armor  
+        51..=100 => format!("Armor_{}", id),
+        // Accessories
+        101..=150 => format!("Accessory_{}", id),
+        // Default
+        _ => format!("Item_{}", id),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

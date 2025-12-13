@@ -377,6 +377,55 @@ pub fn parse_evp(data: &[u8], filename: &str, version: &GameVersion) -> Result<E
     Ok(result)
 }
 
+/// Patch encounters into an ENP file's raw data.
+///
+/// This modifies the encounters section of an ENP file in place.
+/// The encounters are written at the fixed offset after the header
+/// (MAX_ENEMIES * 8 bytes = 672 bytes for GC).
+///
+/// Returns the modified data.
+pub fn patch_enp_encounters(data: &[u8], encounters: &[EnemyEncounter]) -> Vec<u8> {
+    let mut result = data.to_vec();
+
+    // Header is MAX_ENEMIES entries × 8 bytes each
+    let header_size = MAX_ENEMIES * 8;
+
+    // Check if data is large enough
+    if result.len() < header_size {
+        return result;
+    }
+
+    // Find where encounters end (first enemy position)
+    let mut cursor = Cursor::new(data);
+    let mut first_enemy_pos = data.len();
+
+    for _ in 0..MAX_ENEMIES {
+        if cursor.position() as usize + 8 > data.len() {
+            break;
+        }
+        let id = cursor.read_i32_be().unwrap_or(-1);
+        let pos = cursor.read_i32_be().unwrap_or(-1);
+
+        if id >= 0 && pos > 0 && (pos as usize) < data.len() {
+            first_enemy_pos = first_enemy_pos.min(pos as usize);
+        }
+    }
+
+    // Calculate available space for encounters
+    let encounter_space = first_enemy_pos.saturating_sub(header_size);
+    let max_encounters = encounter_space / EnemyEncounter::ENTRY_SIZE;
+
+    // Write encounters (up to max that fit)
+    for (i, encounter) in encounters.iter().take(max_encounters).enumerate() {
+        let offset = header_size + i * EnemyEncounter::ENTRY_SIZE;
+        if offset + EnemyEncounter::ENTRY_SIZE <= result.len() {
+            encounter.write_to(&mut result[offset..offset + EnemyEncounter::ENTRY_SIZE]);
+        }
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

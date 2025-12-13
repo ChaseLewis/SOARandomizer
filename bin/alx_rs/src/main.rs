@@ -38,6 +38,11 @@ struct Args {
     #[arg(short, long, value_name = "IMPORT_DIR")]
     import: Option<PathBuf>,
 
+    /// Dump an ENP file's structure to JSON for debugging
+    /// Example: --dump-enp a101b_ep.enp
+    #[arg(long, value_name = "ENP_FILE")]
+    dump_enp: Option<String>,
+
     /// Skip confirmation prompts (auto-confirm overwrites)
     #[arg(short = 'y', long = "yes")]
     yes: bool,
@@ -68,6 +73,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Validate ISO path
     if !args.iso_path.exists() {
         return Err(format!("ISO file not found: {}", args.iso_path.display()).into());
+    }
+
+    // Check if we're in dump-enp mode
+    if let Some(enp_name) = args.dump_enp {
+        return run_dump_enp(&args.iso_path, &enp_name, args.output.as_deref());
     }
 
     // Check if we're in import mode
@@ -124,6 +134,86 @@ fn run_export(iso_path: &Path, output: Option<PathBuf>) -> Result<(), Box<dyn st
 
     println!();
     println!("Export complete!");
+
+    Ok(())
+}
+
+fn run_dump_enp(
+    iso_path: &Path,
+    enp_name: &str,
+    output_path: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{decompress_aklz, dump_enp};
+
+    println!("ALX_RS - ENP File Dumper");
+    println!("========================");
+    println!("ISO: {}", iso_path.display());
+    println!("ENP: {}", enp_name);
+
+    // Load ISO
+    let mut game = GameRoot::open(iso_path)?;
+    println!("Detected: {:?}", game.version());
+
+    // Find the ENP file
+    let pattern = if enp_name.contains(".enp") {
+        enp_name.replace(".enp", "")
+    } else {
+        enp_name.to_string()
+    };
+
+    let matching_files = game.iso_mut().list_files_matching(&pattern)?;
+
+    let mut found = false;
+    for entry in &matching_files {
+        let filename = entry
+            .path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        if !filename.ends_with(".enp") {
+            continue;
+        }
+
+        if !filename.contains(&pattern) {
+            continue;
+        }
+
+        println!("\nFound: {}", filename);
+
+        // Read and decompress the file
+        let raw_data = game.iso_mut().read_file_direct(entry)?;
+        let data = decompress_aklz(&raw_data)?;
+
+        println!("  Compressed size: {} bytes", raw_data.len());
+        println!("  Decompressed size: {} bytes", data.len());
+
+        // Dump the structure
+        let dump = dump_enp(&data, &filename, game.version())?;
+
+        // Convert to JSON
+        let json = serde_json::to_string_pretty(&dump)?;
+
+        // Output
+        if let Some(output) = output_path {
+            let output_file = if output.is_dir() {
+                output.join(format!("{}.json", filename))
+            } else {
+                output.to_path_buf()
+            };
+            std::fs::write(&output_file, &json)?;
+            println!("  Written to: {}", output_file.display());
+        } else {
+            println!("\n{}", json);
+        }
+
+        found = true;
+        break;
+    }
+
+    if !found {
+        return Err(format!("ENP file not found: {}", enp_name).into());
+    }
 
     Ok(())
 }
@@ -500,8 +590,6 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
     }
 
     // Import enemy encounters (merge with existing)
-    // Note: Encounters are read from ENP files but writing back is not yet supported
-    // This import parses the CSV but doesn't write back (ENP writing not implemented)
     {
         let path = import_dir.join("enemyencounter.csv");
         if path.exists() {
@@ -510,9 +598,8 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
             let file = File::open(&path)?;
             let reader = BufReader::new(file);
             let data = CsvImporter::import_enemy_encounters(reader, &existing)?;
-            println!(" {} entries (note: writing back to ENP files not yet supported)", data.len());
-            // TODO: Implement writing encounters back to ENP files
-            // game.write_enemy_encounters(&data)?;
+            println!(" {} entries", data.len());
+            game.write_enemy_encounters(&data)?;
         } else {
             println!("Skipping enemy encounters (file not found)");
         }
@@ -789,7 +876,30 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
         &item_db,
         &enemy_names,
     )?;
-    CsvExporter::export_enemy_tasks(&tasks, File::create(output_dir.join("enemytask.csv"))?)?;
+
+    // Build lookups for enemy task names (magic and super moves)
+    let enemy_magic_data = game.read_enemy_magic()?;
+    let enemy_super_moves_data = game.read_enemy_super_moves()?;
+
+    let mut enemy_magic_names: std::collections::HashMap<u32, String> =
+        std::collections::HashMap::new();
+    for m in &enemy_magic_data {
+        enemy_magic_names.insert(m.id, m.name.clone());
+    }
+
+    let mut enemy_super_move_names: std::collections::HashMap<u32, String> =
+        std::collections::HashMap::new();
+    for s in &enemy_super_moves_data {
+        enemy_super_move_names.insert(s.id, s.name.clone());
+    }
+
+    CsvExporter::export_enemy_tasks(
+        &tasks,
+        &enemies,
+        &enemy_magic_names,
+        &enemy_super_move_names,
+        File::create(output_dir.join("enemytask.csv"))?,
+    )?;
     println!(" {} enemies, {} tasks", enemies.len(), tasks.len());
 
     // Enemy encounters (from ENP files)
@@ -812,5 +922,74 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
     )?;
     println!(" {} encounters", encounters.len());
 
+    // Export ENP file dumps
+    export_enp_dumps(game, output_dir)?;
+
+    Ok(())
+}
+
+fn export_enp_dumps(
+    game: &mut GameRoot,
+    output_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{decompress_aklz, dump_enp};
+
+    let enp_dir = output_dir.join("enp");
+    fs::create_dir_all(&enp_dir)?;
+
+    print!("Exporting ENP file dumps...");
+
+    // Find all ENP files
+    let all_files = game.iso_mut().list_files_matching("")?;
+    let enp_files: Vec<_> = all_files
+        .iter()
+        .filter(|e| {
+            e.path
+                .file_name()
+                .map(|s| s.to_string_lossy().ends_with(".enp"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    let mut count = 0;
+    for entry in &enp_files {
+        let filename = entry
+            .path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // Read and decompress the file
+        let raw_data = match game.iso_mut().read_file_direct(entry) {
+            Ok(data) => data,
+            Err(_) => continue,
+        };
+
+        let data = match decompress_aklz(&raw_data) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        // Dump the structure
+        let dump = match dump_enp(&data, &filename, game.version()) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        // Skip files with no enemies (likely multi-segment or special format)
+        if dump.enemies.is_empty() {
+            continue;
+        }
+
+        // Convert to JSON
+        let json = serde_json::to_string_pretty(&dump)?;
+
+        // Write to enp subfolder
+        let output_file = enp_dir.join(format!("{}.json", filename));
+        fs::write(&output_file, &json)?;
+        count += 1;
+    }
+
+    println!(" {} files", count);
     Ok(())
 }

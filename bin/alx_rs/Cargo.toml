@@ -12,6 +12,7 @@ categories = ["command-line-utilities", "game-development"]
 [dependencies]
 alx = { path = "../../libs/alx" }
 clap = { version = "4", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 csv = "1.4"

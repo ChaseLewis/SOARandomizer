@@ -54,6 +54,7 @@ dependencies = [
  "alx",
  "clap",
  "csv",
+ "serde_json",
  "tempfile",
 ]
 

@@ -374,6 +374,165 @@ fn test_compare_with_reference_csv() {
 }
 
 #[test]
+fn test_write_enemy_encounters_roundtrip() {
+    skip_if_no_writable_iso!();
+
+    // Load from writable ISO
+    let mut game = common::load_writable_game();
+
+    // Read original encounters
+    let mut encounters = game.read_enemy_encounters().unwrap();
+    let original_count = encounters.len();
+    assert!(original_count > 0, "Should have encounters to test with");
+
+    // Find an encounter to modify
+    let first_enc = &mut encounters[0];
+    let original_initiative = first_enc.initiative;
+    let original_ec1_id = first_enc.enemy_slots[0].enemy_id;
+
+    // Modify it
+    first_enc.initiative = if original_initiative == 100 { 101 } else { 100 };
+    let new_initiative = first_enc.initiative;
+
+    // Also modify an enemy slot if it has one
+    let new_ec1_id = if original_ec1_id == 255 {
+        original_ec1_id // Can't modify empty slot
+    } else if original_ec1_id == 1 {
+        2
+    } else {
+        1
+    };
+    first_enc.enemy_slots[0].enemy_id = new_ec1_id;
+
+    println!(
+        "Modifying encounter 0 in {}: initiative {} -> {}, EC1 {} -> {}",
+        first_enc.filter, original_initiative, new_initiative, original_ec1_id, new_ec1_id
+    );
+
+    // Write back
+    game.write_enemy_encounters(&encounters).unwrap();
+
+    // Re-read and verify
+    let reread = game.read_enemy_encounters().unwrap();
+    assert_eq!(reread.len(), original_count, "Count should be preserved");
+
+    // Find the same encounter
+    let reread_enc = &reread[0];
+    assert_eq!(
+        reread_enc.initiative, new_initiative,
+        "Initiative should have been updated"
+    );
+    assert_eq!(
+        reread_enc.enemy_slots[0].enemy_id, new_ec1_id,
+        "EC1 ID should have been updated"
+    );
+
+    // Restore original values
+    let mut restored = reread.clone();
+    restored[0].initiative = original_initiative;
+    restored[0].enemy_slots[0].enemy_id = original_ec1_id;
+    game.write_enemy_encounters(&restored).unwrap();
+
+    println!("✓ Write encounter roundtrip verified");
+}
+
+#[test]
+fn test_aklz_identity_roundtrip_crc32() {
+    skip_if_no_iso!();
+
+    use alx::io::{compress_aklz, decompress_aklz, is_aklz};
+    use crc32fast::Hasher;
+
+    let mut game = common::load_game();
+
+    // Get list of ENP files
+    let enp_files = game.iso_mut().list_files_matching("_ep.enp").unwrap();
+    assert!(!enp_files.is_empty(), "Should have ENP files");
+
+    let mut tested = 0;
+    let mut matched = 0;
+    let mut mismatched = Vec::new();
+
+    for entry in &enp_files {
+        let filename = entry
+            .path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // Read original compressed data
+        let original_data = game.iso_mut().read_file_direct(entry).unwrap();
+
+        // Skip uncompressed files
+        if !is_aklz(&original_data) {
+            continue;
+        }
+
+        // Calculate original CRC32
+        let mut hasher = Hasher::new();
+        hasher.update(&original_data);
+        let original_crc = hasher.finalize();
+
+        // Decompress
+        let decompressed = decompress_aklz(&original_data).unwrap();
+
+        // Recompress (identity - no changes)
+        let recompressed = compress_aklz(&decompressed);
+
+        // Calculate recompressed CRC32
+        let mut hasher = Hasher::new();
+        hasher.update(&recompressed);
+        let recompressed_crc = hasher.finalize();
+
+        tested += 1;
+
+        if original_crc == recompressed_crc {
+            matched += 1;
+        } else {
+            // Verify the recompressed data still decompresses correctly
+            let re_decompressed = decompress_aklz(&recompressed).unwrap();
+            assert_eq!(
+                decompressed, re_decompressed,
+                "Recompressed data should decompress to same content for {}",
+                filename
+            );
+
+            mismatched.push((
+                filename.clone(),
+                original_data.len(),
+                recompressed.len(),
+                original_crc,
+                recompressed_crc,
+            ));
+        }
+    }
+
+    println!("\nAKLZ identity roundtrip results:");
+    println!("  Tested: {} files", tested);
+    println!("  Byte-identical: {} files", matched);
+    println!("  Different compression: {} files", mismatched.len());
+
+    if !mismatched.is_empty() {
+        println!("\nFiles with different compression (but identical content):");
+        for (name, orig_size, new_size, orig_crc, new_crc) in mismatched.iter().take(5) {
+            let size_diff = *new_size as i64 - *orig_size as i64;
+            println!(
+                "  {}: {} -> {} bytes ({:+}), CRC {:08X} -> {:08X}",
+                name, orig_size, new_size, size_diff, orig_crc, new_crc
+            );
+        }
+        if mismatched.len() > 5 {
+            println!("  ... and {} more", mismatched.len() - 5);
+        }
+
+        // This is informational - different compression is OK as long as content matches
+        println!("\n✓ All files decompress correctly (compression ratio may vary)");
+    } else {
+        println!("✓ All {} files are byte-identical after roundtrip!", tested);
+    }
+}
+
+#[test]
 fn test_encounter_file_breakdown() {
     skip_if_no_iso!();
 
