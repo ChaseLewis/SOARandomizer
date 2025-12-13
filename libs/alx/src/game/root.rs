@@ -1217,6 +1217,217 @@ impl GameRoot {
         Ok(())
     }
 
+    /// Build a GlobalEnemyDatabase from all ENP files in the game.
+    /// This stores ALL enemy variants (multiple entries per name with different stats).
+    /// Use this as a fallback when an enemy isn't found in a file-specific database.
+    pub fn build_global_enemy_database(&mut self) -> Result<crate::io::GlobalEnemyDatabase> {
+        use crate::io::{decompress_aklz, GlobalEnemyDatabase};
+        use crate::lookups::enemy_names_map;
+
+        let mut db = GlobalEnemyDatabase::new();
+        let enemy_names = enemy_names_map();
+
+        // Read ENP files (*_ep.enp) - field encounters
+        let enp_files = self.iso.list_files_matching("_ep.enp")?;
+
+        for entry in &enp_files {
+            let raw_data = self.iso.read_file_direct(entry)?;
+            let data = decompress_aklz(&raw_data)?;
+
+            // Parse header to find enemy positions
+            if data.len() < 8 {
+                continue;
+            }
+
+            // Check for multi-segment signature
+            if data[0..4] == [0x00, 0x00, 0xff, 0xff] {
+                continue;
+            }
+
+            const MAX_ENEMIES: usize = 84;
+            let mut enemies: Vec<(u32, String, usize)> = Vec::new();
+
+            // Read header entries
+            for i in 0..MAX_ENEMIES {
+                let offset = i * 8;
+                if offset + 8 > data.len() {
+                    break;
+                }
+
+                let enemy_id = i32::from_be_bytes([
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
+                let position = i32::from_be_bytes([
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
+                ]);
+
+                if enemy_id >= 0 && position > 0 && (position as usize) < data.len() {
+                    let name = enemy_names
+                        .get(&(enemy_id as u32))
+                        .cloned()
+                        .unwrap_or_else(|| format!("Enemy_{}", enemy_id));
+                    enemies.push((enemy_id as u32, name, position as usize));
+                }
+            }
+
+            // Sort by position to find boundaries
+            enemies.sort_by_key(|(_, _, pos)| *pos);
+
+            // Extract raw enemy data - add ALL variants to global database
+            for i in 0..enemies.len() {
+                let (id, name, pos) = &enemies[i];
+                let end = if i + 1 < enemies.len() {
+                    enemies[i + 1].2
+                } else {
+                    data.len()
+                };
+
+                if *pos < data.len() && end <= data.len() {
+                    let raw = data[*pos..end].to_vec();
+                    db.add(name.clone(), *id, raw);
+                }
+            }
+        }
+
+        Ok(db)
+    }
+
+    /// Build an EnemyDatabase from a specific ENP file.
+    /// This extracts raw enemy data from that file for use in rebuilding it.
+    pub fn build_enemy_database_for_file(&mut self, filename: &str) -> Result<crate::io::EnemyDatabase> {
+        use crate::io::{decompress_aklz, EnemyDatabase};
+        use crate::lookups::enemy_names_map;
+
+        let mut db = EnemyDatabase::new();
+        let enemy_names = enemy_names_map();
+
+        // Find and read the specific ENP file
+        let matching = self.iso.list_files_matching(filename)?;
+        
+        for entry in &matching {
+            let entry_name = entry
+                .path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            if entry_name != filename {
+                continue;
+            }
+
+            let raw_data = self.iso.read_file_direct(entry)?;
+            let data = decompress_aklz(&raw_data)?;
+
+            // Parse header to find enemy positions
+            if data.len() < 8 {
+                continue;
+            }
+
+            // Check for multi-segment signature
+            if data[0..4] == [0x00, 0x00, 0xff, 0xff] {
+                continue;
+            }
+
+            const MAX_ENEMIES: usize = 84;
+            let mut enemies: Vec<(u32, String, usize)> = Vec::new();
+
+            // Read header entries
+            for i in 0..MAX_ENEMIES {
+                let offset = i * 8;
+                if offset + 8 > data.len() {
+                    break;
+                }
+
+                let enemy_id = i32::from_be_bytes([
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
+                let position = i32::from_be_bytes([
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
+                ]);
+
+                if enemy_id >= 0 && position > 0 && (position as usize) < data.len() {
+                    let name = enemy_names
+                        .get(&(enemy_id as u32))
+                        .cloned()
+                        .unwrap_or_else(|| format!("Enemy_{}", enemy_id));
+                    enemies.push((enemy_id as u32, name, position as usize));
+                }
+            }
+
+            // Sort by position to find boundaries
+            enemies.sort_by_key(|(_, _, pos)| *pos);
+
+            // Extract raw enemy data
+            for i in 0..enemies.len() {
+                let (id, name, pos) = &enemies[i];
+                let end = if i + 1 < enemies.len() {
+                    enemies[i + 1].2
+                } else {
+                    data.len()
+                };
+
+                if *pos < data.len() && end <= data.len() {
+                    let raw = data[*pos..end].to_vec();
+                    db.add(name.clone(), *id, raw);
+                }
+            }
+
+            return Ok(db);
+        }
+
+        Err(Error::FileNotFound {
+            path: std::path::PathBuf::from(filename),
+        })
+    }
+
+    /// Write an ENP file back to the ISO.
+    /// Compresses with AKLZ if the original was compressed.
+    pub fn write_enp_file(&mut self, filename: &str, data: &[u8]) -> Result<()> {
+        use crate::io::{compress_aklz, is_aklz};
+
+        // Find the file
+        let matching = self.iso.list_files_matching(filename)?;
+        
+        for entry in &matching {
+            let entry_name = entry
+                .path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            if entry_name == filename {
+                // Check if original was compressed
+                let raw_data = self.iso.read_file_direct(entry)?;
+                let was_compressed = is_aklz(&raw_data);
+
+                // Compress if original was compressed
+                let output = if was_compressed {
+                    compress_aklz(data)
+                } else {
+                    data.to_vec()
+                };
+
+                self.iso.write_file(&entry.path, &output)?;
+                return Ok(());
+            }
+        }
+
+        Err(Error::FileNotFound {
+            path: std::path::PathBuf::from(filename),
+        })
+    }
 }
 
 #[cfg(test)]

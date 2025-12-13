@@ -143,7 +143,7 @@ fn run_dump_enp(
     enp_name: &str,
     output_path: Option<&Path>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use alx::io::{decompress_aklz, dump_enp};
+    use alx::io::{decompress_aklz, dump_enp_editable};
 
     println!("ALX_RS - ENP File Dumper");
     println!("========================");
@@ -153,6 +153,9 @@ fn run_dump_enp(
     // Load ISO
     let mut game = GameRoot::open(iso_path)?;
     println!("Detected: {:?}", game.version());
+
+    // Build item database for item name lookups
+    let item_db = game.build_item_database()?;
 
     // Find the ENP file
     let pattern = if enp_name.contains(".enp") {
@@ -188,8 +191,8 @@ fn run_dump_enp(
         println!("  Compressed size: {} bytes", raw_data.len());
         println!("  Decompressed size: {} bytes", data.len());
 
-        // Dump the structure
-        let dump = dump_enp(&data, &filename, game.version())?;
+        // Dump the structure using simplified editable format
+        let dump = dump_enp_editable(&data, &filename, game.version(), &item_db)?;
 
         // Convert to JSON
         let json = serde_json::to_string_pretty(&dump)?;
@@ -589,21 +592,8 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
         }
     }
 
-    // Import enemy encounters (merge with existing)
-    {
-        let path = import_dir.join("enemyencounter.csv");
-        if path.exists() {
-            print!("Importing enemy encounters...");
-            let existing = game.read_enemy_encounters()?;
-            let file = File::open(&path)?;
-            let reader = BufReader::new(file);
-            let data = CsvImporter::import_enemy_encounters(reader, &existing)?;
-            println!(" {} entries", data.len());
-            game.write_enemy_encounters(&data)?;
-        } else {
-            println!("Skipping enemy encounters (file not found)");
-        }
-    }
+    // Note: Enemy encounters are now imported via ENP JSON files, not CSV
+    // The CSV export is kept for reference/documentation purposes
 
     // Import swashbucklers
     if let Some(data) = import_csv!(
@@ -666,8 +656,91 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
         }
     }
 
-    // Note: Enemies from ENP/DAT files are not yet supported for import
-    // (they require writing back to file-based storage, not just DOL)
+    // Import ENP files from JSON
+    import_enp_files(game, import_dir)?;
+
+    Ok(())
+}
+
+fn import_enp_files(
+    game: &mut GameRoot,
+    import_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{build_enp, EnpDefinition};
+
+    let enp_dir = import_dir.join("enp");
+    if !enp_dir.exists() {
+        println!("Skipping ENP files (enp/ directory not found)");
+        return Ok(());
+    }
+
+    print!("Importing ENP files...");
+    std::io::Write::flush(&mut std::io::stdout())?;
+
+    // Build item database for reverse lookup (name -> ID)
+    let item_db = game.build_item_database()?;
+
+    // Build global enemy database (all enemies from all files)
+    // This is used as a fallback when an enemy isn't in the current file
+    let global_db = game.build_global_enemy_database()?;
+
+    // Find all JSON files in enp directory
+    let mut count = 0;
+    let mut errors = 0;
+
+    for entry in std::fs::read_dir(&enp_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.extension().map(|e| e == "json").unwrap_or(false) {
+            // Read and parse JSON
+            let json_content = std::fs::read_to_string(&path)?;
+            let def: EnpDefinition = match serde_json::from_str(&json_content) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("\n  Error parsing {}: {}", path.display(), e);
+                    errors += 1;
+                    continue;
+                }
+            };
+
+            // Build enemy database from THIS specific ENP file's original data
+            let file_db = match game.build_enemy_database_for_file(&def.filename) {
+                Ok(db) => db,
+                Err(e) => {
+                    eprintln!("\n  Error reading original {}: {}", def.filename, e);
+                    errors += 1;
+                    continue;
+                }
+            };
+
+            // Build the ENP file with patched data
+            // Uses file-specific DB first, then falls back to global DB for "stolen" enemies
+            let enp_data = match build_enp(&def, &file_db, Some(&global_db), &item_db) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("\n  Error building {}: {}", def.filename, e);
+                    errors += 1;
+                    continue;
+                }
+            };
+
+            // Write back to ISO
+            match game.write_enp_file(&def.filename, &enp_data) {
+                Ok(()) => count += 1,
+                Err(e) => {
+                    eprintln!("\n  Error writing {}: {}", def.filename, e);
+                    errors += 1;
+                }
+            }
+        }
+    }
+
+    if errors > 0 {
+        println!(" {} files ({} errors)", count, errors);
+    } else {
+        println!(" {} files", count);
+    }
 
     Ok(())
 }
@@ -923,7 +996,7 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
     println!(" {} encounters", encounters.len());
 
     // Export ENP file dumps
-    export_enp_dumps(game, output_dir)?;
+    export_enp_dumps(game, output_dir, &item_db)?;
 
     Ok(())
 }
@@ -931,8 +1004,9 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
 fn export_enp_dumps(
     game: &mut GameRoot,
     output_dir: &Path,
+    item_db: &alx::items::ItemDatabase,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use alx::io::{decompress_aklz, dump_enp};
+    use alx::io::{decompress_aklz, dump_enp_editable};
 
     let enp_dir = output_dir.join("enp");
     fs::create_dir_all(&enp_dir)?;
@@ -970,8 +1044,8 @@ fn export_enp_dumps(
             Err(_) => continue,
         };
 
-        // Dump the structure
-        let dump = match dump_enp(&data, &filename, game.version()) {
+        // Dump the structure using simplified editable format
+        let dump = match dump_enp_editable(&data, &filename, game.version(), item_db) {
             Ok(d) => d,
             Err(_) => continue,
         };

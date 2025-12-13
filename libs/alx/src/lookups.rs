@@ -673,56 +673,6 @@ pub fn action_param_name(id: i16) -> &'static str {
     }
 }
 
-/// Get item name by ID.
-/// These are the US item names from the game vocabulary.
-pub fn item_name(id: u32) -> String {
-    match id {
-        // Healing items (240-255)
-        240 => "Sacri Crystal".to_string(),
-        241 => "Sacri Box".to_string(),
-        242 => "Sacres Crystal".to_string(),
-        243 => "Sacrum Crystal".to_string(),
-        244 => "Curia Crystal".to_string(),
-        245 => "Risan Crystal".to_string(),
-        246 => "Riselem Crystal".to_string(),
-        247 => "Sylenis Box".to_string(),
-        248 => "Pyri Box".to_string(),
-        249 => "Pyrum Box".to_string(),
-        250 => "Paranta Seed".to_string(),
-        251 => "Vidal Seed".to_string(),
-        252 => "Glyph of Might".to_string(),
-        253 => "Glyph of Speed".to_string(),
-        254 => "Aura of Valor".to_string(),
-        255 => "Dew of Serene".to_string(),
-        // Stat boosters (256-267)
-        256 => "Moonberry".to_string(),
-        257 => "Chom".to_string(),
-        258 => "Gold".to_string(),
-        259 => "Magic Droplet".to_string(),
-        260 => "Crystales Box".to_string(),
-        261 => "Abirik Cham".to_string(),
-        262 => "Moonlight Robe".to_string(),
-        263 => "Sky Fang".to_string(),
-        264 => "Icyl Seed".to_string(),
-        265 => "Complete Kit".to_string(),
-        266 => "Repair Kit".to_string(),
-        267 => "Slipara Box".to_string(),
-        // More items
-        273 => "Healing Salve".to_string(),
-        274 => "Magic Dew".to_string(),
-        // Discovery items
-        300 => "Cham".to_string(),
-        // Weapons
-        0..=50 => format!("Weapon_{}", id),
-        // Armor  
-        51..=100 => format!("Armor_{}", id),
-        // Accessories
-        101..=150 => format!("Accessory_{}", id),
-        // Default
-        _ => format!("Item_{}", id),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,7 +4,8 @@ use crate::entries::Enemy;
 use crate::error::Result;
 use crate::game::region::GameVersion;
 use crate::io::BinaryReader;
-use crate::lookups::{enemy_names_map, item_name};
+use crate::items::ItemDatabase;
+use crate::lookups::enemy_names_map;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -129,8 +130,9 @@ pub fn dump_enp_editable(
     data: &[u8],
     filename: &str,
     version: &GameVersion,
+    item_db: &ItemDatabase,
 ) -> Result<EnpDefinition> {
-    let dump = dump_enp(data, filename, version)?;
+    let dump = dump_enp(data, filename, version, item_db)?;
 
     Ok(EnpDefinition {
         filename: dump.filename,
@@ -157,7 +159,12 @@ pub fn dump_enp_editable(
 }
 
 /// Dump an ENP file to a full debug format
-pub fn dump_enp(data: &[u8], filename: &str, version: &GameVersion) -> Result<EnpDump> {
+pub fn dump_enp(
+    data: &[u8],
+    filename: &str,
+    version: &GameVersion,
+    item_db: &ItemDatabase,
+) -> Result<EnpDump> {
     let enemy_names = enemy_names_map();
 
     let mut dump = EnpDump {
@@ -308,7 +315,7 @@ pub fn dump_enp(data: &[u8], filename: &str, version: &GameVersion) -> Result<En
                     .filter(|d| d.item_id >= 0)
                     .map(|d| ItemDropDef {
                         probability: d.probability,
-                        item: item_name(d.item_id as u32),
+                        item: item_db.name_or_default(d.item_id as i32),
                         amount: d.amount,
                     })
                     .collect();
