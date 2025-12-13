@@ -212,11 +212,7 @@ fn find_match(buffer: &[u8], buffer_ptr: usize, data_pos: usize, data: &[u8]) ->
 
     // Search through all positions we've written to
     // Start from the beginning to find older matches first
-    let search_start = if buffer_ptr > BUFFER_SIZE {
-        buffer_ptr - BUFFER_SIZE
-    } else {
-        0
-    };
+    let search_start = buffer_ptr.saturating_sub(BUFFER_SIZE);
 
     for match_start in search_start..buffer_ptr {
         // Key constraint from Ruby: match_start + match_size < buffer_ptr

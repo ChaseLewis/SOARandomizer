@@ -1863,11 +1863,11 @@ impl CsvExporter {
         let mut enemy_jp_names: HashMap<u32, String> = HashMap::new();
         let mut enemy_us_names: HashMap<u32, String> = HashMap::new();
         for e in enemies {
-            if !enemy_jp_names.contains_key(&e.id) {
-                enemy_jp_names.insert(e.id, e.name_jp.clone());
+            enemy_jp_names.entry(e.id).or_insert_with(|| {
                 // Use vocabulary lookup for US name
                 enemy_us_names.insert(e.id, enemy_name(e.id).to_string());
-            }
+                e.name_jp.clone()
+            });
         }
 
         // Aggregate tasks: group by (enemy_id, task sequence) and use "*" for identical tasks
@@ -1938,7 +1938,7 @@ impl CsvExporter {
                 // - If from ENP/EVP (or multiple files), use "*"
                 // - If only from DAT, use the DAT filename
                 let has_enp_evp =
-                    filter_priority(&best_filter) <= 1 || filters_with_tasks.len() > 0;
+                    filter_priority(&best_filter) <= 1 || !filters_with_tasks.is_empty();
                 let output_filter = if has_enp_evp {
                     "*".to_string()
                 } else {
