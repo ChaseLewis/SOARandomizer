@@ -181,10 +181,7 @@ fn test_enemy_encounter_csv_roundtrip() {
     );
 
     for (orig, imp) in original_encounters.iter().zip(imported.iter()) {
-        assert_eq!(
-            orig.id, imp.id,
-            "ID should match after roundtrip"
-        );
+        assert_eq!(orig.id, imp.id, "ID should match after roundtrip");
         assert_eq!(
             orig.filter, imp.filter,
             "Filter should match after roundtrip"
@@ -202,7 +199,8 @@ fn test_enemy_encounter_csv_roundtrip() {
 
         for i in 0..8 {
             assert_eq!(
-                orig.enemy_slots[i].enemy_id, imp.enemy_slots[i].enemy_id,
+                orig.enemy_slots[i].enemy_id,
+                imp.enemy_slots[i].enemy_id,
                 "Enemy slot {} should match after roundtrip for {} in {}",
                 i + 1,
                 orig.id,
@@ -555,6 +553,9 @@ fn test_encounter_file_breakdown() {
         println!("  ... and {} more files", files.len() - 20);
     }
 
-    println!("\nTotal: {} files, {} encounters", by_file.len(), encounters.len());
+    println!(
+        "\nTotal: {} files, {} encounters",
+        by_file.len(),
+        encounters.len()
+    );
 }
-

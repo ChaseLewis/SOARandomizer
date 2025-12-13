@@ -1921,19 +1921,14 @@ impl CsvExporter {
 
             for (filter, tasks) in filter_groups {
                 let sig = task_signature(&tasks);
-                by_signature
-                    .entry(sig)
-                    .or_default()
-                    .push((filter, tasks));
+                by_signature.entry(sig).or_default().push((filter, tasks));
             }
 
             // For each unique signature, determine the filter
             for (_sig, mut filters_with_tasks) in by_signature {
                 // Sort by priority (ENP/EVP first)
                 filters_with_tasks.sort_by(|(a, _), (b, _)| {
-                    filter_priority(a)
-                        .cmp(&filter_priority(b))
-                        .then(a.cmp(b))
+                    filter_priority(a).cmp(&filter_priority(b)).then(a.cmp(b))
                 });
 
                 // Get the best filter (lowest priority = ENP/EVP)

@@ -4,7 +4,7 @@ use std::io::Read;
 
 use crate::entries::{
     Accessory, Armor, Character, CharacterFlags, CharacterMagic, CharacterSuperMove, CrewMember,
-    EnemyEncounter, EnemyMagic, EnemyShip, EnemySuperMove, EnemySlot, ExpBoost, ExpCurve,
+    EnemyEncounter, EnemyMagic, EnemyShip, EnemySlot, EnemySuperMove, ExpBoost, ExpCurve,
     MagicExpCurve, OccasionFlags, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop,
     SpecialItem, SpiritCurve, SpiritLevel, Swashbuckler, Trait, TreasureChest, UsableItem, Weapon,
     MAX_ENEMY_SLOTS,

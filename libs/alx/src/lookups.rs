@@ -636,7 +636,7 @@ pub fn action_name(id: i16) -> &'static str {
         550 => "Attack",
         551 => "Guard",
         552 => "Run",
-        _ => "",  // Empty means look up from magic/super moves
+        _ => "", // Empty means look up from magic/super moves
     }
 }
 

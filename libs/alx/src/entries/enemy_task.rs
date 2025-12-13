@@ -5,7 +5,9 @@ use std::io::Cursor;
 
 use crate::error::Result;
 use crate::io::BinaryReader;
-use crate::lookups::{action_name, action_param_name, branch_name, branch_param_name, task_type_name};
+use crate::lookups::{
+    action_name, action_param_name, branch_name, branch_param_name, task_type_name,
+};
 
 /// An enemy AI task/action.
 #[derive(Debug, Clone, Serialize, Deserialize)]

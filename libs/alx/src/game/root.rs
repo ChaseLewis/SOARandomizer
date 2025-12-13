@@ -1300,7 +1300,10 @@ impl GameRoot {
 
     /// Build an EnemyDatabase from a specific ENP file.
     /// This extracts raw enemy data from that file for use in rebuilding it.
-    pub fn build_enemy_database_for_file(&mut self, filename: &str) -> Result<crate::io::EnemyDatabase> {
+    pub fn build_enemy_database_for_file(
+        &mut self,
+        filename: &str,
+    ) -> Result<crate::io::EnemyDatabase> {
         use crate::io::{decompress_aklz, EnemyDatabase};
         use crate::lookups::enemy_names_map;
 
@@ -1309,7 +1312,7 @@ impl GameRoot {
 
         // Find and read the specific ENP file
         let matching = self.iso.list_files_matching(filename)?;
-        
+
         for entry in &matching {
             let entry_name = entry
                 .path
@@ -1399,7 +1402,7 @@ impl GameRoot {
 
         // Find the file
         let matching = self.iso.list_files_matching(filename)?;
-        
+
         for entry in &matching {
             let entry_name = entry
                 .path
@@ -1434,4 +1437,3 @@ impl GameRoot {
 mod tests {
     // Integration tests would go here
 }
-

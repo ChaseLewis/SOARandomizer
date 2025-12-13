@@ -127,7 +127,7 @@ impl GlobalEnemyDatabase {
         if variants.is_empty() {
             return None;
         }
-        
+
         // Find the variant with the closest level
         variants
             .iter()
@@ -164,7 +164,7 @@ impl GlobalEnemyDatabase {
 /// This updates stats and item drops while preserving AI tasks
 fn patch_enemy_data(raw: &[u8], def: &EnemyDefinition, item_db: &ItemDatabase) -> Vec<u8> {
     let mut data = raw.to_vec();
-    
+
     if data.len() < Enemy::ENTRY_SIZE {
         return data; // Not enough data to patch
     }
@@ -227,7 +227,7 @@ fn patch_enemy_data(raw: &[u8], def: &EnemyDefinition, item_db: &ItemDatabase) -
             let drop = &def.item_drops[i];
             write_i16_be(&mut data, offset, drop.probability);
             write_i16_be(&mut data, offset + 2, drop.amount);
-            
+
             // Look up item ID from name
             let item_id = if drop.item.eq_ignore_ascii_case("None") {
                 -1i16
@@ -272,10 +272,10 @@ fn write_i32_be(data: &mut [u8], offset: usize, value: i32) {
 }
 
 /// Build an ENP file from a definition and enemy databases, applying edits from the definition.
-/// 
+///
 /// - `db`: File-specific database (enemies from the original ENP file)
 /// - `global_db`: Optional global database with all enemies from all files (fallback)
-/// 
+///
 /// For each enemy in the definition:
 /// 1. Try to find it in the file-specific database
 /// 2. If not found, try the global database (matching by closest level)
@@ -384,15 +384,13 @@ pub fn build_enp(
         for slot in 0..8 {
             if slot < encounter.enemies.len() {
                 let enemy_name = &encounter.enemies[slot];
-                let global_id = name_to_global_id.get(enemy_name).ok_or_else(|| {
-                    Error::ParseError {
-                        offset: cursor.position() as usize,
-                        message: format!(
-                            "Encounter references unknown enemy: {}",
-                            enemy_name
-                        ),
-                    }
-                })?;
+                let global_id =
+                    name_to_global_id
+                        .get(enemy_name)
+                        .ok_or_else(|| Error::ParseError {
+                            offset: cursor.position() as usize,
+                            message: format!("Encounter references unknown enemy: {}", enemy_name),
+                        })?;
                 cursor.write_u8(*global_id)?;
             } else {
                 cursor.write_u8(255)?; // Empty slot
@@ -424,4 +422,3 @@ mod tests {
         assert!(db.get("Unknown").is_none());
     }
 }
-
