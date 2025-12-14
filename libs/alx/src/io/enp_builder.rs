@@ -407,10 +407,20 @@ pub fn build_enp(
     Ok(result)
 }
 
+/// Alignment for segment data (8 bytes)
+const SEGMENT_ALIGNMENT: usize = 8;
+
+/// Helper to align a value to the next boundary
+fn align_to(value: usize, alignment: usize) -> usize {
+    (value + alignment - 1) & !(alignment - 1)
+}
+
 /// Bake multiple ENP segment files into a single multi-segment ENP file.
 ///
 /// This is used for files like `a099a_ep.enp` which combines `a099a_01ep.enp` through
 /// `a099a_13ep.enp` into a single baked file.
+///
+/// Segments are aligned to 8-byte boundaries, with 0xFF padding between segments.
 ///
 /// # Arguments
 /// * `segments` - Vec of (segment_name, segment_data) pairs. Names should be like "a099a_01ep.enp"
@@ -428,7 +438,7 @@ pub fn bake_enp_segments(segments: &[(&str, &[u8])]) -> Result<Vec<u8>> {
     // Calculate header size: 8 bytes header + 32 bytes per segment
     let header_size = 8 + (segments.len() * 32);
 
-    // Calculate total size and positions
+    // Calculate total size and positions with 8-byte alignment
     let mut current_pos = header_size;
     let mut segment_info: Vec<(String, usize, usize)> = Vec::new();
 
@@ -436,11 +446,16 @@ pub fn bake_enp_segments(segments: &[(&str, &[u8])]) -> Result<Vec<u8>> {
         // Convert .enp to .bin for the stored name (game expects .bin extension)
         let stored_name = name.replace(".enp", ".bin");
         segment_info.push((stored_name, current_pos, data.len()));
+        // Advance position and align to 8-byte boundary
         current_pos += data.len();
+        current_pos = align_to(current_pos, SEGMENT_ALIGNMENT);
     }
 
+    // Total size includes the final alignment (which acts as trailing padding)
     let total_size = current_pos;
-    let mut output = vec![0u8; total_size];
+
+    // Initialize with 0xFF so alignment padding is correct
+    let mut output = vec![0xFFu8; total_size];
 
     // Write header signature: 00 00 FF FF
     output[0] = 0x00;
@@ -461,10 +476,11 @@ pub fn bake_enp_segments(segments: &[(&str, &[u8])]) -> Result<Vec<u8>> {
     let mut offset = 8;
     for (stored_name, pos, size) in &segment_info {
         // Write name (20 bytes, null-padded)
+        // First zero-fill the name area, then write the name
+        output[offset..offset + 20].fill(0);
         let name_bytes = stored_name.as_bytes();
         let copy_len = name_bytes.len().min(20);
         output[offset..offset + copy_len].copy_from_slice(&name_bytes[..copy_len]);
-        // Rest is already zeroed
         offset += 20;
 
         // Write position (i32 BE)
@@ -477,8 +493,8 @@ pub fn bake_enp_segments(segments: &[(&str, &[u8])]) -> Result<Vec<u8>> {
         output[offset..offset + 4].copy_from_slice(&size_bytes);
         offset += 4;
 
-        // Write check value (i32 BE, use 0)
-        output[offset..offset + 4].copy_from_slice(&[0, 0, 0, 0]);
+        // Write check value (i32 BE, -1 = 0xFFFFFFFF)
+        output[offset..offset + 4].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
         offset += 4;
     }
 
@@ -516,10 +532,10 @@ mod tests {
 
     #[test]
     fn test_bake_enp_segments() {
-        // Create dummy segment data
-        let seg1 = vec![1u8; 100];
-        let seg2 = vec![2u8; 200];
-        let seg3 = vec![3u8; 150];
+        // Create dummy segment data with sizes that test alignment
+        let seg1 = vec![1u8; 100]; // 100 bytes, needs 4 bytes padding to align to 8
+        let seg2 = vec![2u8; 200]; // 200 bytes, already 8-byte aligned (no padding needed)
+        let seg3 = vec![3u8; 150]; // 150 bytes, needs 2 bytes padding to align to 8
 
         let segments: Vec<(&str, &[u8])> = vec![
             ("a099a_01ep.enp", &seg1),
@@ -545,11 +561,45 @@ mod tests {
         let name1 = String::from_utf8_lossy(&baked[8..28]);
         assert!(name1.starts_with("a099a_01ep.bin"));
 
-        // Check segment data is at the right positions
-        assert_eq!(&baked[header_size..header_size + 100], &seg1[..]);
-        assert_eq!(&baked[header_size + 100..header_size + 300], &seg2[..]);
-        assert_eq!(&baked[header_size + 300..header_size + 450], &seg3[..]);
+        // Check first segment entry check value (offset 8 + 20 + 4 + 4 = 36)
+        assert_eq!(
+            &baked[36..40],
+            &[0xFF, 0xFF, 0xFF, 0xFF],
+            "Check value should be -1"
+        );
 
+        // Check segment data at correct positions with 8-byte alignment:
+        // seg1: at 104, size 100, ends at 204, aligned to 208
+        // seg2: at 208, size 200, ends at 408, already aligned
+        // seg3: at 408, size 150, ends at 558, aligned to 560
+
+        let seg1_start = header_size; // 104
+        let seg1_end = seg1_start + 100; // 204
+        let seg2_start = align_to(seg1_end, SEGMENT_ALIGNMENT); // 208
+        let seg2_end = seg2_start + 200; // 408
+        let seg3_start = align_to(seg2_end, SEGMENT_ALIGNMENT); // 408 (already aligned)
+        let seg3_end = seg3_start + 150; // 558
+        let total_size = align_to(seg3_end, SEGMENT_ALIGNMENT); // 560
+
+        assert_eq!(&baked[seg1_start..seg1_end], &seg1[..]);
+        assert_eq!(&baked[seg2_start..seg2_end], &seg2[..]);
+        assert_eq!(&baked[seg3_start..seg3_end], &seg3[..]);
+
+        // Check padding between seg1 and seg2 is 0xFF
+        assert_eq!(
+            &baked[seg1_end..seg2_start],
+            &[0xFF, 0xFF, 0xFF, 0xFF],
+            "Padding after seg1 should be 0xFF"
+        );
+
+        // Check trailing padding is 0xFF
+        assert_eq!(
+            &baked[seg3_end..total_size],
+            &[0xFF, 0xFF],
+            "Trailing padding should be 0xFF"
+        );
+
+        assert_eq!(baked.len(), total_size);
         println!("Baked file size: {} bytes", baked.len());
     }
 
