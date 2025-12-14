@@ -251,47 +251,43 @@ fn run_dump_evp(
     // Find the EVP file
     let matching_files = game.iso_mut().list_files_matching("epevent.evp")?;
 
-    if matching_files.is_empty() {
-        return Err("EVP file (epevent.evp) not found".into());
-    }
+    let entry = matching_files
+        .first()
+        .ok_or("EVP file (epevent.evp) not found")?;
 
-    for entry in &matching_files {
-        let filename = entry
-            .path
-            .file_name()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
+    let filename = entry
+        .path
+        .file_name()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
 
-        println!("\nDumping: {}", filename);
+    println!("\nDumping: {}", filename);
 
-        // Read and decompress the file
-        let raw_data = game.iso_mut().read_file_direct(entry)?;
-        let data = decompress_aklz(&raw_data)?;
-        println!("  File size: {} bytes (uncompressed)", data.len());
+    // Read and decompress the file
+    let raw_data = game.iso_mut().read_file_direct(entry)?;
+    let data = decompress_aklz(&raw_data)?;
+    println!("  File size: {} bytes (uncompressed)", data.len());
 
-        // Dump the structure using simplified editable format
-        let dump = dump_evp_editable(&data, &filename, game.version(), &item_db)?;
+    // Dump the structure using simplified editable format
+    let dump = dump_evp_editable(&data, &filename, game.version(), &item_db)?;
 
-        println!("  Enemies: {}", dump.enemies.len());
-        println!("  Events: {}", dump.events.len());
+    println!("  Enemies: {}", dump.enemies.len());
+    println!("  Events: {}", dump.events.len());
 
-        // Convert to JSON
-        let json = serde_json::to_string_pretty(&dump)?;
+    // Convert to JSON
+    let json = serde_json::to_string_pretty(&dump)?;
 
-        // Output
-        if let Some(output) = output_path {
-            let output_file = if output.is_dir() {
-                output.join(format!("{}.json", filename))
-            } else {
-                output.to_path_buf()
-            };
-            std::fs::write(&output_file, &json)?;
-            println!("  Written to: {}", output_file.display());
+    // Output
+    if let Some(output) = output_path {
+        let output_file = if output.is_dir() {
+            output.join(format!("{}.json", filename))
         } else {
-            println!("\n{}", json);
-        }
-
-        break;
+            output.to_path_buf()
+        };
+        std::fs::write(&output_file, &json)?;
+        println!("  Written to: {}", output_file.display());
+    } else {
+        println!("\n{}", json);
     }
 
     Ok(())
