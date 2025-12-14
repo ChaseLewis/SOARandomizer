@@ -13,8 +13,6 @@ We will create a UI to make this easier to work with at some point but this is a
 
 - This does not allow code level tweaks. This means things like damage multipliers, treasure chest drops, ship weapon values, etc are all possible to be edited.
 
-- We currently don't export the encounter tables and make them editable. That would be nice and give it a more 'randomizer' vibe if we could hotswap out bosses for versions tuned to the appropriate level. So you could edit an existing bosses strength, but not switch what models spawn where.
-
 - Effects are mapped by an integer to a specified effect in a table. So changing what certain things do is limited to the effects currently in game. Though magic numbers themselves can be tuned.
 
 ## Components
@@ -53,13 +51,14 @@ alx_rs "path/to/game.iso"
 alx_rs "path/to/game.iso" --output my_data
 ```
 
-This creates 23 CSV files containing:
+This creates CSV files and JSON encounter definitions containing:
 - **Equipment**: Weapons, Armor, Accessories
 - **Items**: Usable Items, Special Items, Ship Items
 - **Characters**: Stats, Magic, Super Moves
 - **Ships**: Playable Ships, Cannons, Accessories
 - **Enemies**: Enemy stats, Magic, Super Moves, Ships
 - **World**: Shops, Treasure Chests, Crew Members, Swashbucklers
+- **Encounters**: ENP files (area encounters) and EVP files (scripted event battles)
 
 ### Import Modified Data
 
@@ -106,6 +105,25 @@ Without `--output`, you'll be prompted to confirm before modifying the original.
 | `swashbuckler.csv` | Swashbuckler ratings | 24 |
 | `spiritcurve.csv` | SP regeneration curves | 6 |
 | `expboost.csv` | EXP multipliers | 3 |
+
+### Encounter Files (JSON)
+
+In addition to CSV files, the tool exports editable JSON files for encounter data:
+
+| Folder | Description | Files |
+|--------|-------------|-------|
+| `data/enp/` | Area encounter definitions (`.enp.json`) | ~90 |
+| `data/evp/` | Scripted event battles (`epevent.evp.json`) | 1 |
+
+**ENP files** define random encounters for each area, including:
+- Which enemies can spawn in each encounter slot
+- Enemy stats overrides for that area
+- Encounter group configurations
+
+**EVP files** define scripted story battles (boss fights, forced encounters), including:
+- Character and enemy positions on the battlefield
+- Battle conditions (can escape, defeat conditions)
+- Enemy stats for event-specific encounters
 
 ## Validation
 
