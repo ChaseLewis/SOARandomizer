@@ -407,9 +407,151 @@ pub fn build_enp(
     Ok(result)
 }
 
+/// Bake multiple ENP segment files into a single multi-segment ENP file.
+///
+/// This is used for files like `a099a_ep.enp` which combines `a099a_01ep.enp` through
+/// `a099a_13ep.enp` into a single baked file.
+///
+/// # Arguments
+/// * `segments` - Vec of (segment_name, segment_data) pairs. Names should be like "a099a_01ep.enp"
+///
+/// # Returns
+/// The baked multi-segment ENP file as raw bytes (uncompressed)
+pub fn bake_enp_segments(segments: &[(&str, &[u8])]) -> Result<Vec<u8>> {
+    if segments.is_empty() {
+        return Err(Error::ParseError {
+            offset: 0,
+            message: "No segments to bake".to_string(),
+        });
+    }
+
+    // Calculate header size: 8 bytes header + 32 bytes per segment
+    let header_size = 8 + (segments.len() * 32);
+
+    // Calculate total size and positions
+    let mut current_pos = header_size;
+    let mut segment_info: Vec<(String, usize, usize)> = Vec::new();
+
+    for (name, data) in segments {
+        // Convert .enp to .bin for the stored name (game expects .bin extension)
+        let stored_name = name.replace(".enp", ".bin");
+        segment_info.push((stored_name, current_pos, data.len()));
+        current_pos += data.len();
+    }
+
+    let total_size = current_pos;
+    let mut output = vec![0u8; total_size];
+
+    // Write header signature: 00 00 FF FF
+    output[0] = 0x00;
+    output[1] = 0x00;
+    output[2] = 0xFF;
+    output[3] = 0xFF;
+
+    // Write number of segments (i16 BE)
+    let num_segments = segments.len() as i16;
+    output[4] = (num_segments >> 8) as u8;
+    output[5] = num_segments as u8;
+
+    // Write check value: FF FF (-1 as i16 BE)
+    output[6] = 0xFF;
+    output[7] = 0xFF;
+
+    // Write segment entries (32 bytes each)
+    let mut offset = 8;
+    for (stored_name, pos, size) in &segment_info {
+        // Write name (20 bytes, null-padded)
+        let name_bytes = stored_name.as_bytes();
+        let copy_len = name_bytes.len().min(20);
+        output[offset..offset + copy_len].copy_from_slice(&name_bytes[..copy_len]);
+        // Rest is already zeroed
+        offset += 20;
+
+        // Write position (i32 BE)
+        let pos_bytes = (*pos as i32).to_be_bytes();
+        output[offset..offset + 4].copy_from_slice(&pos_bytes);
+        offset += 4;
+
+        // Write size (i32 BE)
+        let size_bytes = (*size as i32).to_be_bytes();
+        output[offset..offset + 4].copy_from_slice(&size_bytes);
+        offset += 4;
+
+        // Write check value (i32 BE, use 0)
+        output[offset..offset + 4].copy_from_slice(&[0, 0, 0, 0]);
+        offset += 4;
+    }
+
+    // Write segment data
+    for ((_, data), (_, pos, _)) in segments.iter().zip(segment_info.iter()) {
+        output[*pos..*pos + data.len()].copy_from_slice(data);
+    }
+
+    Ok(output)
+}
+
+/// List of segment filenames for the a099a baked file
+pub const A099A_SEGMENTS: [&str; 13] = [
+    "a099a_01ep.enp",
+    "a099a_02ep.enp",
+    "a099a_03ep.enp",
+    "a099a_04ep.enp",
+    "a099a_05ep.enp",
+    "a099a_06ep.enp",
+    "a099a_07ep.enp",
+    "a099a_08ep.enp",
+    "a099a_09ep.enp",
+    "a099a_10ep.enp",
+    "a099a_11ep.enp",
+    "a099a_12ep.enp",
+    "a099a_13ep.enp",
+];
+
+/// The baked filename for a099a
+pub const A099A_BAKED_FILENAME: &str = "a099a_ep.enp";
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_bake_enp_segments() {
+        // Create dummy segment data
+        let seg1 = vec![1u8; 100];
+        let seg2 = vec![2u8; 200];
+        let seg3 = vec![3u8; 150];
+
+        let segments: Vec<(&str, &[u8])> = vec![
+            ("a099a_01ep.enp", &seg1),
+            ("a099a_02ep.enp", &seg2),
+            ("a099a_03ep.enp", &seg3),
+        ];
+
+        let baked = bake_enp_segments(&segments).unwrap();
+
+        // Check header signature
+        assert_eq!(&baked[0..4], &[0x00, 0x00, 0xFF, 0xFF]);
+
+        // Check segment count (3)
+        assert_eq!(&baked[4..6], &[0x00, 0x03]);
+
+        // Check header check value
+        assert_eq!(&baked[6..8], &[0xFF, 0xFF]);
+
+        // Header size = 8 + 3*32 = 104 bytes
+        let header_size = 104;
+
+        // Check first segment name starts at offset 8
+        let name1 = String::from_utf8_lossy(&baked[8..28]);
+        assert!(name1.starts_with("a099a_01ep.bin"));
+
+        // Check segment data is at the right positions
+        assert_eq!(&baked[header_size..header_size + 100], &seg1[..]);
+        assert_eq!(&baked[header_size + 100..header_size + 300], &seg2[..]);
+        assert_eq!(&baked[header_size + 300..header_size + 450], &seg3[..]);
+
+        println!("Baked file size: {} bytes", baked.len());
+    }
 
     #[test]
     fn test_enemy_database() {

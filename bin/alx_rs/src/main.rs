@@ -666,7 +666,10 @@ fn import_enp_files(
     game: &mut GameRoot,
     import_dir: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use alx::io::{build_enp, EnpDefinition};
+    use alx::io::{
+        bake_enp_segments, build_enp, decompress_aklz, EnpDefinition, A099A_BAKED_FILENAME,
+        A099A_SEGMENTS,
+    };
 
     let enp_dir = import_dir.join("enp");
     if !enp_dir.exists() {
@@ -683,6 +686,9 @@ fn import_enp_files(
     // Build global enemy database (all enemies from all files)
     // This is used as a fallback when an enemy isn't in the current file
     let global_db = game.build_global_enemy_database()?;
+
+    // Track if any a099a files were imported (need rebaking)
+    let mut a099a_imported = false;
 
     // Find all JSON files in enp directory
     let mut count = 0;
@@ -703,6 +709,11 @@ fn import_enp_files(
                     continue;
                 }
             };
+
+            // Check if this is an a099a segment file
+            if A099A_SEGMENTS.contains(&def.filename.as_str()) {
+                a099a_imported = true;
+            }
 
             // Build enemy database from THIS specific ENP file's original data
             let file_db = match game.build_enemy_database_for_file(&def.filename) {
@@ -740,6 +751,62 @@ fn import_enp_files(
         println!(" {} files ({} errors)", count, errors);
     } else {
         println!(" {} files", count);
+    }
+
+    // Rebake a099a_ep.enp if any segment files were imported
+    if a099a_imported {
+        print!("Rebaking {}...", A099A_BAKED_FILENAME);
+        std::io::Write::flush(&mut std::io::stdout())?;
+
+        // Read all 13 segment files from the ISO (they've just been updated)
+        let mut segments: Vec<(String, Vec<u8>)> = Vec::new();
+        let mut rebake_ok = true;
+
+        for seg_name in A099A_SEGMENTS {
+            // Find and read the segment file from ISO
+            match game.read_enp_file_raw(seg_name) {
+                Ok(compressed) => {
+                    // Decompress the segment
+                    match decompress_aklz(&compressed) {
+                        Ok(decompressed) => {
+                            segments.push((seg_name.to_string(), decompressed));
+                        }
+                        Err(e) => {
+                            eprintln!("\n  Error decompressing {}: {}", seg_name, e);
+                            rebake_ok = false;
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("\n  Error reading {}: {}", seg_name, e);
+                    rebake_ok = false;
+                    break;
+                }
+            }
+        }
+
+        if rebake_ok {
+            // Create segment references for baking
+            let segment_refs: Vec<(&str, &[u8])> = segments
+                .iter()
+                .map(|(name, data)| (name.as_str(), data.as_slice()))
+                .collect();
+
+            // Bake into multi-segment format
+            match bake_enp_segments(&segment_refs) {
+                Ok(baked) => {
+                    // Write to ISO (write_enp_file handles compression)
+                    match game.write_enp_file(A099A_BAKED_FILENAME, &baked) {
+                        Ok(()) => println!(" done ({} bytes uncompressed)", baked.len()),
+                        Err(e) => eprintln!("\n  Error writing {}: {}", A099A_BAKED_FILENAME, e),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("\n  Error baking {}: {}", A099A_BAKED_FILENAME, e);
+                }
+            }
+        }
     }
 
     Ok(())
@@ -789,14 +856,20 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
         export_special_items,
         "specialitem.csv"
     );
-    export_csv!(
-        game,
-        output_dir,
-        "characters",
-        read_characters,
-        export_characters,
-        "character.csv"
-    );
+
+    // Build item database early for lookups (characters, shops, treasure chests, and enemies need it)
+    let item_db = game.build_item_database()?;
+
+    // Characters need item database for equipment name lookup
+    print!("Exporting characters...");
+    let characters = game.read_characters()?;
+    CsvExporter::export_characters(
+        &characters,
+        &item_db,
+        File::create(output_dir.join("character.csv"))?,
+    )?;
+    println!(" {} entries", characters.len());
+
     export_csv!(
         game,
         output_dir,
@@ -813,9 +886,6 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
         export_character_super_moves,
         "charactersupermove.csv"
     );
-
-    // Build item database early for lookups (shops, treasure chests, and enemies need it)
-    let item_db = game.build_item_database()?;
 
     // Shops need item database for item name lookup
     print!("Exporting shops...");

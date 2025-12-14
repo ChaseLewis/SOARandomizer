@@ -539,7 +539,11 @@ impl CsvExporter {
     }
 
     /// Export characters to CSV format matching reference ALX format.
-    pub fn export_characters<W: Write>(characters: &[Character], writer: W) -> Result<()> {
+    pub fn export_characters<W: Write>(
+        characters: &[Character],
+        item_db: &ItemDatabase,
+        writer: W,
+    ) -> Result<()> {
         let mut wtr = csv::Writer::from_writer(writer);
 
         // Header matching reference ALX format (76 columns)
@@ -701,11 +705,11 @@ impl CsvExporter {
                 c.element_name().to_string(),
                 "0".to_string(), // Pad 1
                 c.weapon_id.to_string(),
-                "".to_string(), // [Weapon Name] - would need item database
+                item_db.name_or_default(c.weapon_id as i32).to_string(),
                 c.armor_id.to_string(),
-                "".to_string(), // [Armor Name]
+                item_db.name_or_default(c.armor_id as i32).to_string(),
                 c.accessory_id.to_string(),
-                "".to_string(), // [Accessory Name]
+                item_db.name_or_default(c.accessory_id as i32).to_string(),
                 format!("0b{:012b}", c.movement_flags),
                 may_dodge.to_string(),
                 unk_damage.to_string(),

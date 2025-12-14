@@ -11,9 +11,6 @@ use alx::entries::{
     UsableItem, Weapon,
 };
 
-/// Skip test if writable ISO is not available.
-#[macro_use]
-extern crate alx;
 
 // =============================================================================
 // Patch Roundtrip Tests (read from ISO, patch back, compare)

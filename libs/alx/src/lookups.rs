@@ -288,6 +288,7 @@ pub fn category_name(id: i8) -> &'static str {
         3 => "Drachma",
         4 => "Enrique",
         5 => "Gilder",
+        6 => "Magic",
         _ => "???",
     }
 }
@@ -295,7 +296,7 @@ pub fn category_name(id: i8) -> &'static str {
 /// Get ship occasion name by ID.
 pub fn ship_occasion_name(id: i8) -> &'static str {
     match id {
-        -1 => "None",
+        -1 => "Never",
         0 => "Magic Cannon",
         1 => "Always",
         _ => "???",

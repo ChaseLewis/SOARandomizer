@@ -316,6 +316,7 @@ fn test_csv_import_workflow() {
     // Step 1: Read original values
     let mut game = GameRoot::open(&test_iso).expect("Failed to open ISO");
     let original_chars = game.read_characters().expect("Failed to read characters");
+    let item_db = game.build_item_database().expect("Failed to build item database");
 
     println!(
         "Original Vyse: Max HP={}, Power={}",
@@ -324,7 +325,7 @@ fn test_csv_import_workflow() {
 
     // Step 2: Export to CSV
     let mut csv_data = Vec::new();
-    CsvExporter::export_characters(&original_chars, &mut csv_data).expect("Failed to export");
+    CsvExporter::export_characters(&original_chars, &item_db, &mut csv_data).expect("Failed to export");
     let csv_string = String::from_utf8_lossy(&csv_data);
     println!("\nOriginal CSV (first 2 lines):");
     for line in csv_string.lines().take(2) {

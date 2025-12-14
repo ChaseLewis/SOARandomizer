@@ -82,6 +82,7 @@ pub struct WritableIsoState {
 }
 
 /// Check if the writable ISO copy exists.
+#[allow(dead_code)]
 pub fn writable_iso_exists() -> bool {
     Path::new(WRITABLE_ISO_PATH).exists()
 }

@@ -299,17 +299,13 @@ mod tests {
         original.extend_from_slice(&[0, 0, 0, 99, 0, 0, 2, 220]);
 
         // Lots of 255s
-        for _ in 0..500 {
-            original.push(255);
-        }
+        original.extend(std::iter::repeat_n(255u8, 500));
 
         // Some zeros in the middle
         original.extend_from_slice(&[0, 0, 10, 156]);
 
         // More 255s
-        for _ in 0..100 {
-            original.push(255);
-        }
+        original.extend(std::iter::repeat_n(255u8, 100));
 
         // More structured data
         original.extend_from_slice(&[102, 2, 42, 255, 255, 255]);

@@ -42,7 +42,7 @@ fn test_lookup_by_id() {
     // ID 500 is in ship item range but likely unused
     let unknown = db.name_or_default(500);
     assert!(
-        unknown == "???" || unknown.len() > 0,
+        unknown == "???" || !unknown.is_empty(),
         "Should return ??? or item name for ID 500"
     );
 

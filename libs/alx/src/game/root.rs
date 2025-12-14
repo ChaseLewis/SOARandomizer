@@ -1431,6 +1431,28 @@ impl GameRoot {
             path: std::path::PathBuf::from(filename),
         })
     }
+
+    /// Read the raw (potentially compressed) bytes of an ENP file from the ISO.
+    pub fn read_enp_file_raw(&mut self, filename: &str) -> Result<Vec<u8>> {
+        // Find the file
+        let matching = self.iso.list_files_matching(filename)?;
+
+        for entry in &matching {
+            let entry_name = entry
+                .path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            if entry_name == filename {
+                return self.iso.read_file_direct(entry);
+            }
+        }
+
+        Err(Error::FileNotFound {
+            path: std::path::PathBuf::from(filename),
+        })
+    }
 }
 
 #[cfg(test)]
