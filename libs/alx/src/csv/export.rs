@@ -5,9 +5,9 @@ use std::io::Write;
 use crate::entries::{
     Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy,
     EnemyEncounter, EnemyEvent, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost,
-    ExpCurve, MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop,
-    SpecialItem, SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
-    DEFEAT_CONDITIONS, ESCAPE_CONDITIONS, TRAIT_NAMES,
+    ExpCurve, MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem,
+    SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect, DEFEAT_CONDITIONS,
+    ESCAPE_CONDITIONS, TRAIT_NAMES,
 };
 use crate::error::Result;
 use crate::items::ItemDatabase;

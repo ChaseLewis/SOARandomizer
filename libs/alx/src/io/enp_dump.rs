@@ -421,17 +421,17 @@ pub struct EventEnemyDef {
 
 /// Defeat condition names
 const DEFEAT_COND_NAMES: [&str; 4] = [
-    "Must Not Lose",  // 0
-    "May Try Again",  // 1
-    "May Lose",       // 2
-    "Unknown",        // 3+
+    "Must Not Lose", // 0
+    "May Try Again", // 1
+    "May Lose",      // 2
+    "Unknown",       // 3+
 ];
 
 /// Escape condition names
 const ESCAPE_COND_NAMES: [&str; 3] = [
-    "May Escape",       // 0
-    "Must Not Escape",  // 1
-    "Unknown",          // 2+
+    "May Escape",      // 0
+    "Must Not Escape", // 1
+    "Unknown",         // 2+
 ];
 
 /// Character names by ID

@@ -7,8 +7,8 @@ use super::region::GameVersion;
 use crate::entries::{
     Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy,
     EnemyEncounter, EnemyEvent, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost,
-    ExpCurve, MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop,
-    SpecialItem, SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
+    ExpCurve, MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem,
+    SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
 };
 use crate::error::{Error, Result};
 use crate::io::{

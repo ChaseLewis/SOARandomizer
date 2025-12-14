@@ -63,10 +63,10 @@ impl EventEnemySlot {
 
 /// Defeat condition names
 pub const DEFEAT_CONDITIONS: [&str; 4] = [
-    "Defeat All",   // 0
-    "Defeat Boss",  // 1
-    "Unknown (2)",  // 2
-    "Unknown (3)",  // 3
+    "Defeat All",  // 0
+    "Defeat Boss", // 1
+    "Unknown (2)", // 2
+    "Unknown (3)", // 3
 ];
 
 /// Escape condition names

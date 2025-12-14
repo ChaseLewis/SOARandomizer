@@ -126,13 +126,13 @@ fn test_a099a_ep_binary_roundtrip() {
     for i in 0..segments_info.len() {
         let (name, pos, size) = &segments_info[i];
         let seg_end = pos + size;
-        
+
         let next_start = if i + 1 < segments_info.len() {
             segments_info[i + 1].1
         } else {
             original_data.len()
         };
-        
+
         let padding = next_start - seg_end;
         if padding > 0 {
             println!(
@@ -219,10 +219,7 @@ fn test_a099a_ep_binary_roundtrip() {
             "Original: {:02X?}",
             &original_data[start..end.min(original_data.len())]
         );
-        println!(
-            "Rebaked:  {:02X?}",
-            &rebaked[start..end.min(rebaked.len())]
-        );
+        println!("Rebaked:  {:02X?}", &rebaked[start..end.min(rebaked.len())]);
         println!("Total differences: {} bytes", diff_count);
 
         panic!(
