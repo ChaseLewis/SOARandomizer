@@ -10,6 +10,7 @@ mod character_super_move;
 mod crew_member;
 mod enemy;
 mod enemy_encounter;
+mod enemy_event;
 mod enemy_magic;
 mod enemy_ship;
 mod enemy_super_move;
@@ -39,6 +40,10 @@ pub use character_super_move::CharacterSuperMove;
 pub use crew_member::CrewMember;
 pub use enemy::{Enemy, EnemyItemDrop};
 pub use enemy_encounter::{EnemyEncounter, EnemySlot, MAX_ENEMY_SLOTS};
+pub use enemy_event::{
+    EnemyEvent, EventCharacterSlot, EventEnemySlot, DEFEAT_CONDITIONS, ESCAPE_CONDITIONS,
+    MAX_EVENT_CHARACTERS, MAX_EVENT_ENEMIES,
+};
 pub use enemy_magic::EnemyMagic;
 pub use enemy_ship::{EnemyShip, ShipArmament, ShipItemDrop};
 pub use enemy_super_move::{EnemySkillCategory, EnemySuperMove};

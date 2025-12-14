@@ -6,9 +6,9 @@ use super::offsets::Offsets;
 use super::region::GameVersion;
 use crate::entries::{
     Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy,
-    EnemyEncounter, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve,
-    MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem,
-    SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
+    EnemyEncounter, EnemyEvent, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost,
+    ExpCurve, MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop,
+    SpecialItem, SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
 };
 use crate::error::{Error, Result};
 use crate::io::{
@@ -1157,6 +1157,37 @@ impl GameRoot {
         Ok(all_encounters)
     }
 
+    /// Read all enemy events from the EVP file (epevent.evp).
+    ///
+    /// Enemy events are scripted battle scenarios that include character positions,
+    /// enemy positions, defeat/escape conditions, and initiative settings.
+    /// These are used for story battles and special encounters.
+    pub fn read_enemy_events(&mut self) -> Result<Vec<EnemyEvent>> {
+        let mut all_events: Vec<EnemyEvent> = Vec::new();
+
+        // Read EVP file (epevent.evp) - scripted battle events
+        if let Ok(evp_files) = self.iso.list_files_matching("epevent.evp") {
+            for entry in &evp_files {
+                let raw_data = self.iso.read_file_direct(entry)?;
+                let data = decompress_aklz(&raw_data)?;
+
+                let filename = entry
+                    .path
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "epevent.evp".to_string());
+
+                let parsed = parse_evp(&data, &filename, &self.version)?;
+                all_events.extend(parsed.events);
+            }
+        }
+
+        // Sort by ID
+        all_events.sort_by(|a, b| a.id.cmp(&b.id));
+
+        Ok(all_events)
+    }
+
     /// Write enemy encounters back to ENP files in the ISO.
     ///
     /// This groups encounters by their filter (filename) and writes them
@@ -1451,6 +1482,127 @@ impl GameRoot {
 
         Err(Error::FileNotFound {
             path: std::path::PathBuf::from(filename),
+        })
+    }
+
+    /// Build an EnemyDatabase from the EVP file (epevent.evp).
+    /// This extracts raw enemy data from that file for use in rebuilding it.
+    pub fn build_enemy_database_for_evp(&mut self) -> Result<crate::io::EnemyDatabase> {
+        use crate::entries::EnemyEvent;
+        use crate::io::{decompress_aklz, EnemyDatabase};
+        use crate::lookups::enemy_names_map;
+
+        let mut db = EnemyDatabase::new();
+        let enemy_names = enemy_names_map();
+
+        // Find and read the EVP file
+        let matching = self.iso.list_files_matching("epevent.evp")?;
+
+        for entry in &matching {
+            let raw_data = self.iso.read_file_direct(entry)?;
+            let data = decompress_aklz(&raw_data)?;
+
+            // EVP header: 200 entries × 8 bytes = 1600 bytes
+            // Events: 250 × 37 bytes = 9250 bytes
+            // Enemy data starts at 10850
+            const EVP_MAX_ENEMIES: usize = 200;
+            let header_size = EVP_MAX_ENEMIES * 8;
+            let events_size = 250 * EnemyEvent::ENTRY_SIZE;
+            let _enemies_start = header_size + events_size;
+
+            if data.len() < header_size {
+                continue;
+            }
+
+            // Read header entries
+            let mut enemies: Vec<(u32, String, usize)> = Vec::new();
+            for i in 0..EVP_MAX_ENEMIES {
+                let offset = i * 8;
+                if offset + 8 > data.len() {
+                    break;
+                }
+
+                let enemy_id = i32::from_be_bytes([
+                    data[offset],
+                    data[offset + 1],
+                    data[offset + 2],
+                    data[offset + 3],
+                ]);
+                let position = i32::from_be_bytes([
+                    data[offset + 4],
+                    data[offset + 5],
+                    data[offset + 6],
+                    data[offset + 7],
+                ]);
+
+                if enemy_id >= 0 && position > 0 && (position as usize) < data.len() {
+                    let name = enemy_names
+                        .get(&(enemy_id as u32))
+                        .cloned()
+                        .unwrap_or_else(|| format!("Enemy_{}", enemy_id));
+                    enemies.push((enemy_id as u32, name, position as usize));
+                }
+            }
+
+            // Extract raw data for each enemy
+            for (enemy_id, name, position) in &enemies {
+                if *position + Enemy::ENTRY_SIZE > data.len() {
+                    continue;
+                }
+
+                // Find next enemy position to determine data extent
+                let next_pos = enemies
+                    .iter()
+                    .filter(|(_, _, p)| *p > *position)
+                    .map(|(_, _, p)| *p)
+                    .min()
+                    .unwrap_or(data.len());
+
+                // Extract full enemy data (stats + tasks)
+                let enemy_data = data[*position..next_pos].to_vec();
+                db.add(name.clone(), *enemy_id, enemy_data);
+            }
+        }
+
+        Ok(db)
+    }
+
+    /// Write the EVP file (epevent.evp) back to the ISO.
+    /// Compresses with AKLZ if the original was compressed.
+    pub fn write_evp_file(&mut self, data: &[u8]) -> Result<()> {
+        use crate::io::{compress_aklz, is_aklz};
+
+        const EVP_FILENAME: &str = "epevent.evp";
+
+        // Find the file
+        let matching = self.iso.list_files_matching(EVP_FILENAME)?;
+
+        for entry in &matching {
+            let entry_name = entry
+                .path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            if entry_name == EVP_FILENAME {
+                // Check if original was compressed
+                let raw_data = self.iso.read_file_direct(entry)?;
+                let was_compressed = is_aklz(&raw_data);
+
+                // Compress if original was compressed
+                let output = if was_compressed {
+                    compress_aklz(data)
+                } else {
+                    data.to_vec()
+                };
+
+                self.iso.write_file(&entry.path, &output)?;
+                return Ok(());
+            }
+        }
+
+        Err(Error::FileNotFound {
+            path: std::path::PathBuf::from(EVP_FILENAME),
         })
     }
 }

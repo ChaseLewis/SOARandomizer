@@ -1,6 +1,6 @@
 //! ENP (Enemy Parameters) and EVP (Enemy Event) file parsers.
 
-use crate::entries::{Enemy, EnemyEncounter, EnemyTask};
+use crate::entries::{Enemy, EnemyEncounter, EnemyEvent, EnemyTask};
 use crate::error::{Error, Result};
 use crate::game::region::GameVersion;
 use crate::io::BinaryReader;
@@ -24,9 +24,6 @@ const EVP_MAX_ENEMIES: usize = 200;
 /// Maximum number of events in EVP (GC)
 const EVP_MAX_EVENTS: usize = 250;
 
-/// Size of an EnemyEvent entry (estimated)
-const EVP_EVENT_SIZE: usize = 20;
-
 /// A node in the ENP header pointing to enemy data
 #[derive(Debug, Clone)]
 struct EnemyNode {
@@ -34,15 +31,17 @@ struct EnemyNode {
     pos: usize,
 }
 
-/// Parsed data from an ENP file
+/// Parsed data from an ENP or EVP file
 #[derive(Debug, Clone, Default)]
 pub struct EnpData {
     /// All enemies parsed from the file
     pub enemies: Vec<Enemy>,
     /// All enemy tasks parsed from the file  
     pub tasks: Vec<EnemyTask>,
-    /// All enemy encounters parsed from the file
+    /// All enemy encounters parsed from the file (ENP files)
     pub encounters: Vec<EnemyEncounter>,
+    /// All enemy events parsed from the file (EVP files only)
+    pub events: Vec<EnemyEvent>,
 }
 
 /// Parse an ENP file from raw bytes.
@@ -299,8 +298,8 @@ pub fn parse_evp(data: &[u8], filename: &str, version: &GameVersion) -> Result<E
 
     // EVP header: 200 entries * 8 bytes = 1600 bytes
     let header_size = EVP_MAX_ENEMIES * 8;
-    // EVP events: 250 events * ~20 bytes = 5000 bytes
-    let events_size = EVP_MAX_EVENTS * EVP_EVENT_SIZE;
+    // EVP events: 250 events * 37 bytes = 9250 bytes
+    let events_size = EVP_MAX_EVENTS * EnemyEvent::ENTRY_SIZE;
     let enemies_start = header_size + events_size;
 
     if data.len() < enemies_start {
@@ -324,12 +323,29 @@ pub fn parse_evp(data: &[u8], filename: &str, version: &GameVersion) -> Result<E
         }
     }
 
+    // Read events section (header_size to enemies_start)
+    // Position cursor at start of events
+    cursor.set_position(header_size as u64);
+
+    for event_id in 0..EVP_MAX_EVENTS {
+        if cursor.position() as usize + EnemyEvent::ENTRY_SIZE > data.len() {
+            break;
+        }
+
+        match EnemyEvent::read_one(&mut cursor, event_id as u32, filename) {
+            Ok(event) => {
+                // Only add non-empty events (compare against default)
+                if !event.is_empty() {
+                    result.events.push(event);
+                }
+            }
+            Err(_) => break,
+        }
+    }
+
     if nodes.is_empty() {
         return Ok(result);
     }
-
-    // Skip events section (we don't need it for enemies)
-    // Events start at header_size and end at enemies_start
 
     // Read each enemy from their positions
     for node in &nodes {
@@ -442,5 +458,11 @@ mod tests {
     #[test]
     fn test_encounter_entry_size() {
         assert_eq!(EnemyEncounter::ENTRY_SIZE, 10);
+    }
+
+    #[test]
+    fn test_event_entry_size() {
+        // EnemyEvent: 1 + 12 + 21 + 3 = 37 bytes
+        assert_eq!(EnemyEvent::ENTRY_SIZE, 37);
     }
 }

@@ -43,6 +43,11 @@ struct Args {
     #[arg(long, value_name = "ENP_FILE")]
     dump_enp: Option<String>,
 
+    /// Dump the EVP file's structure to JSON for debugging
+    /// Example: --dump-evp
+    #[arg(long)]
+    dump_evp: bool,
+
     /// Skip confirmation prompts (auto-confirm overwrites)
     #[arg(short = 'y', long = "yes")]
     yes: bool,
@@ -78,6 +83,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Check if we're in dump-enp mode
     if let Some(enp_name) = args.dump_enp {
         return run_dump_enp(&args.iso_path, &enp_name, args.output.as_deref());
+    }
+
+    // Check if we're in dump-evp mode
+    if args.dump_evp {
+        return run_dump_evp(&args.iso_path, args.output.as_deref());
     }
 
     // Check if we're in import mode
@@ -216,6 +226,72 @@ fn run_dump_enp(
 
     if !found {
         return Err(format!("ENP file not found: {}", enp_name).into());
+    }
+
+    Ok(())
+}
+
+fn run_dump_evp(
+    iso_path: &Path,
+    output_path: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{decompress_aklz, dump_evp_editable};
+
+    println!("ALX_RS - EVP File Dumper");
+    println!("========================");
+    println!("ISO: {}", iso_path.display());
+
+    // Load ISO
+    let mut game = GameRoot::open(iso_path)?;
+    println!("Detected: {:?}", game.version());
+
+    // Build item database for item name lookups
+    let item_db = game.build_item_database()?;
+
+    // Find the EVP file
+    let matching_files = game.iso_mut().list_files_matching("epevent.evp")?;
+
+    if matching_files.is_empty() {
+        return Err("EVP file (epevent.evp) not found".into());
+    }
+
+    for entry in &matching_files {
+        let filename = entry
+            .path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        println!("\nDumping: {}", filename);
+
+        // Read and decompress the file
+        let raw_data = game.iso_mut().read_file_direct(entry)?;
+        let data = decompress_aklz(&raw_data)?;
+        println!("  File size: {} bytes (uncompressed)", data.len());
+
+        // Dump the structure using simplified editable format
+        let dump = dump_evp_editable(&data, &filename, game.version(), &item_db)?;
+
+        println!("  Enemies: {}", dump.enemies.len());
+        println!("  Events: {}", dump.events.len());
+
+        // Convert to JSON
+        let json = serde_json::to_string_pretty(&dump)?;
+
+        // Output
+        if let Some(output) = output_path {
+            let output_file = if output.is_dir() {
+                output.join(format!("{}.json", filename))
+            } else {
+                output.to_path_buf()
+            };
+            std::fs::write(&output_file, &json)?;
+            println!("  Written to: {}", output_file.display());
+        } else {
+            println!("\n{}", json);
+        }
+
+        break;
     }
 
     Ok(())
@@ -659,6 +735,77 @@ fn import_all(game: &mut GameRoot, import_dir: &Path) -> Result<(), Box<dyn std:
     // Import ENP files from JSON
     import_enp_files(game, import_dir)?;
 
+    // Import EVP file from JSON
+    import_evp_file(game, import_dir)?;
+
+    Ok(())
+}
+
+fn import_evp_file(
+    game: &mut GameRoot,
+    import_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{build_evp, EvpDefinition};
+
+    let evp_dir = import_dir.join("evp");
+    if !evp_dir.exists() {
+        println!("Skipping EVP file (evp/ directory not found)");
+        return Ok(());
+    }
+
+    // Look for the epevent.evp.json file
+    let evp_file = evp_dir.join("epevent.evp.json");
+    if !evp_file.exists() {
+        println!("Skipping EVP file (epevent.evp.json not found)");
+        return Ok(());
+    }
+
+    print!("Importing EVP file...");
+    std::io::Write::flush(&mut std::io::stdout())?;
+
+    // Build item database for reverse lookup (name -> ID)
+    let item_db = game.build_item_database()?;
+
+    // Build enemy database from the original EVP file
+    let file_db = game.build_enemy_database_for_evp()?;
+
+    // Build global enemy database as fallback
+    let global_db = game.build_global_enemy_database()?;
+
+    // Read and parse JSON
+    let json_content = std::fs::read_to_string(&evp_file)?;
+    let def: EvpDefinition = match serde_json::from_str(&json_content) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("\n  Error parsing {}: {}", evp_file.display(), e);
+            return Err(e.into());
+        }
+    };
+
+    // Build the EVP file with patched data
+    let evp_data = match build_evp(&def, &file_db, Some(&global_db), &item_db) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("\n  Error building EVP: {}", e);
+            return Err(e.into());
+        }
+    };
+
+    // Write back to ISO
+    match game.write_evp_file(&evp_data) {
+        Ok(()) => {
+            println!(
+                " {} enemies, {} events",
+                def.enemies.len(),
+                def.events.len()
+            );
+        }
+        Err(e) => {
+            eprintln!("\n  Error writing EVP: {}", e);
+            return Err(e.into());
+        }
+    }
+
     Ok(())
 }
 
@@ -1065,8 +1212,83 @@ fn export_all(game: &mut GameRoot, output_dir: &Path) -> Result<(), Box<dyn std:
     )?;
     println!(" {} encounters", encounters.len());
 
+    // Enemy events (from EVP file - scripted battles)
+    print!("Exporting enemy events...");
+    let events = game.read_enemy_events()?;
+    CsvExporter::export_enemy_events(
+        &events,
+        File::create(output_dir.join("enemyevent.csv"))?,
+        &encounter_enemy_names,
+    )?;
+    println!(" {} events", events.len());
+
     // Export ENP file dumps
     export_enp_dumps(game, output_dir, &item_db)?;
+
+    // Export EVP file dump
+    export_evp_dump(game, output_dir, &item_db)?;
+
+    Ok(())
+}
+
+fn export_evp_dump(
+    game: &mut GameRoot,
+    output_dir: &Path,
+    item_db: &alx::items::ItemDatabase,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{decompress_aklz, dump_evp_editable};
+
+    let evp_dir = output_dir.join("evp");
+    fs::create_dir_all(&evp_dir)?;
+
+    print!("Exporting EVP file dump...");
+
+    // Find EVP file
+    let matching_files = game.iso_mut().list_files_matching("epevent.evp")?;
+
+    if matching_files.is_empty() {
+        println!(" not found");
+        return Ok(());
+    }
+
+    for entry in &matching_files {
+        let filename = entry
+            .path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        // Read and decompress the file
+        let raw_data = match game.iso_mut().read_file_direct(entry) {
+            Ok(data) => data,
+            Err(_) => continue,
+        };
+
+        let data = match decompress_aklz(&raw_data) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        // Dump the structure using simplified editable format
+        let dump = match dump_evp_editable(&data, &filename, game.version(), item_db) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        // Convert to JSON
+        let json = serde_json::to_string_pretty(&dump)?;
+
+        // Write to evp subfolder
+        let output_file = evp_dir.join(format!("{}.json", filename));
+        fs::write(&output_file, &json)?;
+
+        println!(
+            " {} enemies, {} events",
+            dump.enemies.len(),
+            dump.events.len()
+        );
+        break;
+    }
 
     Ok(())
 }

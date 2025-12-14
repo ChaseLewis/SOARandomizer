@@ -4,9 +4,10 @@ use std::io::Write;
 
 use crate::entries::{
     Accessory, Armor, Character, CharacterMagic, CharacterSuperMove, CrewMember, Enemy,
-    EnemyEncounter, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost, ExpCurve,
-    MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop, SpecialItem,
-    SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect, TRAIT_NAMES,
+    EnemyEncounter, EnemyEvent, EnemyMagic, EnemyShip, EnemySuperMove, EnemyTask, ExpBoost,
+    ExpCurve, MagicExpCurve, PlayableShip, ShipAccessory, ShipCannon, ShipItem, Shop,
+    SpecialItem, SpiritCurve, Swashbuckler, TreasureChest, UsableItem, Weapon, WeaponEffect,
+    DEFEAT_CONDITIONS, ESCAPE_CONDITIONS, TRAIT_NAMES,
 };
 use crate::error::Result;
 use crate::items::ItemDatabase;
@@ -2160,6 +2161,133 @@ impl CsvExporter {
 
         wtr.flush()?;
         Ok(())
+    }
+
+    /// Export enemy events to CSV format.
+    ///
+    /// Enemy events are from the EVP file (epevent.evp) and define scripted battles.
+    /// Format includes character positions, enemy positions, and battle conditions.
+    ///
+    /// The `enemy_names` map is used to look up enemy names by ID.
+    /// The `character_names` function is used to look up character names by ID.
+    pub fn export_enemy_events<W: Write>(
+        events: &[EnemyEvent],
+        writer: W,
+        enemy_names: &std::collections::HashMap<u32, (String, String)>,
+    ) -> Result<()> {
+        let mut wtr = csv::Writer::from_writer(writer);
+
+        // Build header matching original ALX format
+        let mut header = vec![
+            "Entry ID".to_string(),
+            "[Filter]".to_string(),
+            "Magic EXP".to_string(),
+        ];
+
+        // Add columns for each character slot (4 slots)
+        for i in 1..=4 {
+            header.push(format!("Char{} ID", i));
+            header.push(format!("[Char{} Name]", i));
+            header.push(format!("Char{} X", i));
+            header.push(format!("Char{} Z", i));
+        }
+
+        // Add columns for each enemy slot (7 slots)
+        for i in 1..=7 {
+            header.push(format!("Enemy{} ID", i));
+            header.push(format!("[Enemy{} JP Name]", i));
+            header.push(format!("[Enemy{} US Name]", i));
+            header.push(format!("Enemy{} X", i));
+            header.push(format!("Enemy{} Z", i));
+        }
+
+        // Add battle condition columns
+        header.push("Initiative".to_string());
+        header.push("Defeat Cond ID".to_string());
+        header.push("[Defeat Cond Name]".to_string());
+        header.push("Escape Cond ID".to_string());
+        header.push("[Escape Cond Name]".to_string());
+
+        wtr.write_record(&header)?;
+
+        for event in events {
+            let mut row = vec![
+                event.id.to_string(),
+                event.filter.clone(),
+                event.magic_exp.to_string(),
+            ];
+
+            // Add character slot data
+            for slot in &event.characters {
+                row.push(slot.character_id.to_string());
+
+                // Look up character name
+                if slot.character_id == -1 {
+                    row.push("None".to_string());
+                } else {
+                    row.push(character_name(slot.character_id));
+                }
+
+                row.push(slot.x.to_string());
+                row.push(slot.z.to_string());
+            }
+
+            // Add enemy slot data
+            for slot in &event.enemies {
+                row.push(slot.enemy_id.to_string());
+
+                // Look up enemy names
+                if slot.enemy_id == 255 {
+                    row.push("None".to_string());
+                    row.push("None".to_string());
+                } else if let Some((jp_name, us_name)) = enemy_names.get(&(slot.enemy_id as u32)) {
+                    row.push(jp_name.clone());
+                    row.push(us_name.clone());
+                } else {
+                    row.push("???".to_string());
+                    row.push("???".to_string());
+                }
+
+                row.push(slot.x.to_string());
+                row.push(slot.z.to_string());
+            }
+
+            // Add battle condition data
+            row.push(event.initiative.to_string());
+            row.push(event.defeat_cond_id.to_string());
+            let defeat_name = if (event.defeat_cond_id as usize) < DEFEAT_CONDITIONS.len() {
+                DEFEAT_CONDITIONS[event.defeat_cond_id as usize].to_string()
+            } else {
+                format!("Unknown ({})", event.defeat_cond_id)
+            };
+            row.push(defeat_name);
+            row.push(event.escape_cond_id.to_string());
+            let escape_name = if (event.escape_cond_id as usize) < ESCAPE_CONDITIONS.len() {
+                ESCAPE_CONDITIONS[event.escape_cond_id as usize].to_string()
+            } else {
+                format!("Unknown ({})", event.escape_cond_id)
+            };
+            row.push(escape_name);
+
+            wtr.write_record(&row)?;
+        }
+
+        wtr.flush()?;
+        Ok(())
+    }
+}
+
+/// Character names for event battles
+fn character_name(id: i8) -> String {
+    match id {
+        0 => "Vyse".to_string(),
+        1 => "Aika".to_string(),
+        2 => "Fina".to_string(),
+        3 => "Drachma".to_string(),
+        4 => "Gilder".to_string(),
+        5 => "Enrique".to_string(),
+        -1 => "None".to_string(),
+        _ => format!("Unknown ({})", id),
     }
 }
 

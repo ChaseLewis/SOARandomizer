@@ -1,8 +1,8 @@
-//! ENP file builder - constructs ENP files from JSON definitions.
+//! ENP and EVP file builder - constructs ENP/EVP files from JSON definitions.
 
-use crate::entries::Enemy;
+use crate::entries::{Enemy, EnemyEvent};
 use crate::error::{Error, Result};
-use crate::io::enp_dump::{EnemyDefinition, EnpDefinition};
+use crate::io::enp_dump::{EnemyDefinition, EnpDefinition, EvpDefinition};
 use crate::io::BinaryWriter;
 use crate::items::ItemDatabase;
 use std::collections::HashMap;
@@ -525,6 +525,255 @@ pub const A099A_SEGMENTS: [&str; 13] = [
 
 /// The baked filename for a099a
 pub const A099A_BAKED_FILENAME: &str = "a099a_ep.enp";
+
+// ============================================================================
+// EVP Builder
+// ============================================================================
+
+/// Maximum header entries in an EVP file (GC)
+const EVP_MAX_HEADER_ENTRIES: usize = 200;
+
+/// Maximum events in an EVP file (GC)
+const EVP_MAX_EVENTS: usize = 250;
+
+/// Character name to ID mapping
+const CHARACTER_NAMES: [&str; 6] = ["Vyse", "Aika", "Fina", "Drachma", "Gilder", "Enrique"];
+
+/// Defeat condition name to ID mapping
+const DEFEAT_CONDITIONS: [&str; 3] = ["Must Not Lose", "May Try Again", "May Lose"];
+
+/// Escape condition name to ID mapping
+const ESCAPE_CONDITIONS: [&str; 2] = ["May Escape", "Must Not Escape"];
+
+/// Build an EVP file from a definition and enemy databases, applying edits from the definition.
+///
+/// - `db`: File-specific database (enemies from the original EVP file)
+/// - `global_db`: Optional global database with all enemies from all files (fallback)
+///
+/// For each enemy in the definition:
+/// 1. Try to find it in the file-specific database
+/// 2. If not found, try the global database (matching by closest level)
+pub fn build_evp(
+    def: &EvpDefinition,
+    db: &EnemyDatabase,
+    global_db: Option<&GlobalEnemyDatabase>,
+    item_db: &ItemDatabase,
+) -> Result<Vec<u8>> {
+    // Validate enemy count
+    if def.enemies.len() > EVP_MAX_HEADER_ENTRIES {
+        return Err(Error::ParseError {
+            offset: 0,
+            message: format!(
+                "Too many enemies: {} (max {})",
+                def.enemies.len(),
+                EVP_MAX_HEADER_ENTRIES
+            ),
+        });
+    }
+
+    // Validate event count
+    if def.events.len() > EVP_MAX_EVENTS {
+        return Err(Error::ParseError {
+            offset: 0,
+            message: format!(
+                "Too many events: {} (max {})",
+                def.events.len(),
+                EVP_MAX_EVENTS
+            ),
+        });
+    }
+
+    // Look up all enemies and collect their patched data
+    let mut enemy_data: Vec<(u32, Vec<u8>)> = Vec::new();
+    // Map from enemy name to GLOBAL enemy ID (for event references)
+    let mut name_to_global_id: HashMap<String, u8> = HashMap::new();
+
+    for enemy_def in def.enemies.iter() {
+        // First try file-specific database
+        let raw = if let Some(r) = db.get(&enemy_def.name) {
+            r
+        } else if let Some(gdb) = global_db {
+            // Fallback to global database, matching by closest level
+            gdb.get_closest(&enemy_def.name, enemy_def.stats.level)
+                .ok_or_else(|| Error::ParseError {
+                    offset: 0,
+                    message: format!("Enemy not found in any database: {}", enemy_def.name),
+                })?
+        } else {
+            return Err(Error::ParseError {
+                offset: 0,
+                message: format!("Enemy not found in database: {}", enemy_def.name),
+            });
+        };
+
+        // Apply patches from the definition
+        let patched = patch_enemy_data(&raw.data, enemy_def, item_db);
+        enemy_data.push((raw.id, patched));
+        // Store the GLOBAL enemy ID for event references
+        name_to_global_id.insert(enemy_def.name.clone(), raw.id as u8);
+    }
+
+    // Calculate positions
+    // Header: 200 entries × 8 bytes = 1600 bytes
+    let header_size = EVP_MAX_HEADER_ENTRIES * 8;
+    // Events: 250 events × 37 bytes = 9250 bytes
+    let events_size = EVP_MAX_EVENTS * EnemyEvent::ENTRY_SIZE;
+    let enemies_start = header_size + events_size;
+
+    // Calculate enemy positions
+    let mut enemy_positions: Vec<usize> = Vec::new();
+    let mut current_pos = enemies_start;
+
+    for (_, data) in &enemy_data {
+        enemy_positions.push(current_pos);
+        current_pos += data.len();
+    }
+
+    let total_size = current_pos;
+
+    // Build the EVP file
+    let mut result = vec![0xFFu8; total_size]; // Initialize with 0xFF for empty slots
+
+    // Write header (200 entries)
+    for i in 0..EVP_MAX_HEADER_ENTRIES {
+        let offset = i * 8;
+        if i < enemy_data.len() {
+            let (enemy_id, _) = &enemy_data[i];
+            let position = enemy_positions[i] as i32;
+
+            // Write enemy_id (big-endian i32)
+            let id_bytes = (*enemy_id as i32).to_be_bytes();
+            result[offset..offset + 4].copy_from_slice(&id_bytes);
+
+            // Write position (big-endian i32)
+            let pos_bytes = position.to_be_bytes();
+            result[offset + 4..offset + 8].copy_from_slice(&pos_bytes);
+        } else {
+            // Empty slot: -1, -1
+            result[offset..offset + 4].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+            result[offset + 4..offset + 8].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF]);
+        }
+    }
+
+    // Write events (250 events × 37 bytes)
+    for i in 0..EVP_MAX_EVENTS {
+        let offset = header_size + i * EnemyEvent::ENTRY_SIZE;
+
+        // Find event with this ID in the definition
+        let event_def = def.events.iter().find(|e| e.id == i as u32);
+
+        if let Some(evt) = event_def {
+            // Write magic_exp
+            result[offset] = evt.magic_exp;
+
+            // Write 4 character slots (id, x, z each = 12 bytes)
+            for j in 0..4 {
+                let char_offset = offset + 1 + j * 3;
+                if j < evt.characters.len() {
+                    let char_def = &evt.characters[j];
+                    let char_id = character_name_to_id(&char_def.name);
+                    result[char_offset] = char_id as u8;
+                    result[char_offset + 1] = char_def.x as u8;
+                    result[char_offset + 2] = char_def.z as u8;
+                } else {
+                    // Empty character slot
+                    result[char_offset] = 0xFF; // -1 as i8
+                    result[char_offset + 1] = 0xFF;
+                    result[char_offset + 2] = 0xFF;
+                }
+            }
+
+            // Write 7 enemy slots (id, x, z each = 21 bytes)
+            for j in 0..7 {
+                let enemy_offset = offset + 1 + 12 + j * 3;
+                if j < evt.enemies.len() {
+                    let enemy_def = &evt.enemies[j];
+                    let enemy_id = name_to_global_id
+                        .get(&enemy_def.name)
+                        .copied()
+                        .unwrap_or(255);
+                    result[enemy_offset] = enemy_id;
+                    result[enemy_offset + 1] = enemy_def.x as u8;
+                    result[enemy_offset + 2] = enemy_def.z as u8;
+                } else {
+                    // Empty enemy slot
+                    result[enemy_offset] = 255;
+                    result[enemy_offset + 1] = 0xFF;
+                    result[enemy_offset + 2] = 0xFF;
+                }
+            }
+
+            // Write initiative (offset + 1 + 12 + 21 = offset + 34)
+            result[offset + 34] = evt.initiative;
+
+            // Write defeat_cond_id
+            let defeat_id = defeat_condition_to_id(&evt.defeat_condition);
+            result[offset + 35] = defeat_id as u8;
+
+            // Write escape_cond_id
+            let escape_id = escape_condition_to_id(&evt.escape_condition);
+            result[offset + 36] = escape_id as u8;
+        } else {
+            // Empty event - all zeros/defaults
+            result[offset] = 0; // magic_exp
+
+            // 4 empty character slots
+            for j in 0..4 {
+                let char_offset = offset + 1 + j * 3;
+                result[char_offset] = 0xFF; // -1
+                result[char_offset + 1] = 0xFF;
+                result[char_offset + 2] = 0xFF;
+            }
+
+            // 7 empty enemy slots
+            for j in 0..7 {
+                let enemy_offset = offset + 1 + 12 + j * 3;
+                result[enemy_offset] = 255;
+                result[enemy_offset + 1] = 0xFF;
+                result[enemy_offset + 2] = 0xFF;
+            }
+
+            result[offset + 34] = 0; // initiative
+            result[offset + 35] = 0; // defeat_cond_id
+            result[offset + 36] = 0; // escape_cond_id
+        }
+    }
+
+    // Write enemy data
+    for (i, (_, data)) in enemy_data.iter().enumerate() {
+        let pos = enemy_positions[i];
+        result[pos..pos + data.len()].copy_from_slice(data);
+    }
+
+    Ok(result)
+}
+
+/// Convert character name to ID
+fn character_name_to_id(name: &str) -> i8 {
+    CHARACTER_NAMES
+        .iter()
+        .position(|&n| n.eq_ignore_ascii_case(name))
+        .map(|i| i as i8)
+        .unwrap_or(-1)
+}
+
+/// Convert defeat condition name to ID
+fn defeat_condition_to_id(name: &str) -> i8 {
+    DEFEAT_CONDITIONS
+        .iter()
+        .position(|&n| n.eq_ignore_ascii_case(name))
+        .map(|i| i as i8)
+        .unwrap_or(0)
+}
+
+/// Convert escape condition name to ID
+fn escape_condition_to_id(name: &str) -> i8 {
+    ESCAPE_CONDITIONS
+        .iter()
+        .position(|&n| n.eq_ignore_ascii_case(name))
+        .map(|i| i as i8)
+        .unwrap_or(0)
+}
 
 #[cfg(test)]
 mod tests {
