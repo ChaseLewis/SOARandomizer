@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+#
+# Pre-commit hook: run the same fast checks CI enforces, so a commit can't
+# break the build on the formatting or clippy steps.
+#
+# Enable it once per clone with:
+#     git config core.hooksPath .githooks
+#
+# Skip it for a single commit with:  git commit --no-verify
+
+set -e
+
+echo "[pre-commit] cargo fmt --check"
+cargo fmt -p alx -p alx_rs -p skies-randomizer -- --check
+
+echo "[pre-commit] cargo clippy -D warnings"
+cargo clippy -p alx -p alx_rs --no-deps -- -D warnings
+
+# Tests are intentionally left out: they need the ISO at
+# roms/Skies of Arcadia Legends (USA).iso and are slow. To run them too,
+# uncomment the next line.
+# cargo test -p alx -p alx_rs
+
+echo "[pre-commit] OK"

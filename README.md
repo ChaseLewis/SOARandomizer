@@ -204,6 +204,20 @@ cargo test
 cargo test --package alx test_accessories
 ```
 
+### Pre-commit hook
+
+A tracked pre-commit hook in [`.githooks/`](.githooks/pre-commit) runs the same
+fast checks CI enforces (`cargo fmt --check` and `cargo clippy -D warnings`) so a
+commit can't break the build on those steps. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Bypass it for a single commit with `git commit --no-verify`. Tests are left out
+of the hook (they need the ISO and are slow); see the comment in the hook to
+enable them.
+
 ### Project Structure
 
 See [`libs/alx/README.md`](libs/alx/README.md) for library documentation.

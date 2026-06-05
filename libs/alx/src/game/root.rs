@@ -1183,7 +1183,7 @@ impl GameRoot {
         }
 
         // Sort by ID
-        all_events.sort_by(|a, b| a.id.cmp(&b.id));
+        all_events.sort_by_key(|a| a.id);
 
         Ok(all_events)
     }

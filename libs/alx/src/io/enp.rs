@@ -182,11 +182,10 @@ fn parse_enp_segment(
                 result.enemies.push(enemy);
 
                 // Read tasks until we hit an empty one or EOF mark
-                let mut task_id = 1u32;
                 let remaining = data.len() - node.pos - cursor.position() as usize;
                 let max_tasks_possible = remaining / EnemyTask::ENTRY_SIZE;
 
-                for _ in 0..max_tasks_possible.min(MAX_TASKS) {
+                for task_id in (1u32..).take(max_tasks_possible.min(MAX_TASKS)) {
                     if cursor.position() as usize + EnemyTask::ENTRY_SIZE > data.len() - node.pos {
                         break;
                     }
@@ -202,8 +201,6 @@ fn parse_enp_segment(
                     if task.type_id != -1 {
                         result.tasks.push(task);
                     }
-
-                    task_id += 1;
                 }
             }
             Err(_) => {
@@ -239,11 +236,10 @@ pub fn parse_dat_file(data: &[u8], filename: &str, version: &GameVersion) -> Res
         result.enemies.push(enemy);
 
         // Read tasks
-        let mut task_id = 1u32;
         let remaining = data.len().saturating_sub(cursor.position() as usize);
         let max_tasks_possible = remaining / EnemyTask::ENTRY_SIZE;
 
-        for _ in 0..max_tasks_possible.min(MAX_TASKS) {
+        for task_id in (1u32..).take(max_tasks_possible.min(MAX_TASKS)) {
             if cursor.position() as usize + EnemyTask::ENTRY_SIZE > data.len() {
                 break;
             }
@@ -257,8 +253,6 @@ pub fn parse_dat_file(data: &[u8], filename: &str, version: &GameVersion) -> Res
             if task.type_id != -1 {
                 result.tasks.push(task);
             }
-
-            task_id += 1;
         }
     }
 
@@ -361,13 +355,12 @@ pub fn parse_evp(data: &[u8], filename: &str, version: &GameVersion) -> Result<E
                 result.enemies.push(enemy);
 
                 // Read tasks
-                let mut task_id = 1u32;
                 let remaining = data
                     .len()
                     .saturating_sub(node.pos + cursor.position() as usize);
                 let max_tasks_possible = remaining / EnemyTask::ENTRY_SIZE;
 
-                for _ in 0..max_tasks_possible.min(MAX_TASKS) {
+                for task_id in (1u32..).take(max_tasks_possible.min(MAX_TASKS)) {
                     let task_start = node.pos + cursor.position() as usize;
                     if task_start + EnemyTask::ENTRY_SIZE > data.len() {
                         break;
@@ -382,8 +375,6 @@ pub fn parse_evp(data: &[u8], filename: &str, version: &GameVersion) -> Result<E
                     if task.type_id != -1 {
                         result.tasks.push(task);
                     }
-
-                    task_id += 1;
                 }
             }
             Err(_) => continue,
