@@ -78,6 +78,64 @@ alx_rs --import data_folder "path/to/game.iso" -y
 The `--output` flag copies the original ISO first, keeping it untouched.
 Without `--output`, you'll be prompted to confirm before modifying the original.
 
+## Texture Modding (`.mld` unpack / repack)
+
+The game's models and UI live in **`.mld`** archives (AKLZ-compressed Sega Ninja
+model containers). Each holds one or more **GVR** textures. The tool can unpack
+every `.mld` into editable PNGs and repack edited PNGs back into the ISO.
+
+### Unpack all textures
+
+```bash
+# Unpack every .mld in the ISO into per-file folders under "unpacked/"
+alx_rs "path/to/game.iso" --full-unpack unpacked
+```
+
+For an ISO file like `battle\command.mld`, this produces
+`unpacked/battle/command/` containing:
+
+| File | Description |
+|------|-------------|
+| `command.bin` | The full AKLZ-decompressed archive (the repack base). |
+| `texNN.png` | Each texture decoded to RGBA8 — **this is what you edit.** |
+| `texNN.gvr` | The original carved GVR texture (raw, for reference). |
+| `manifest.json` | The repack contract: per-texture format, offset, dimensions, and a pixel hash used to detect edits. |
+
+The whole USA ISO unpacks to ~1791 folders and ~88,000 PNGs.
+
+### Edit
+
+Open any `texNN.png` in an image editor and change it. Keep the **same
+dimensions** — resizing a texture will be rejected on repack. You can leave the
+other files alone; `manifest.json` lists exactly which files belong to the
+package, so stray files an editor drops in (lock files, backups) are ignored.
+
+### Repack into the ISO
+
+```bash
+# Repack the edited folder into a COPY of the ISO
+alx_rs "path/to/game.iso" --repack unpacked --output "modified_game.iso"
+
+# Skip the overwrite prompt with -y
+alx_rs "path/to/game.iso" --repack unpacked --output "modified_game.iso" -y
+```
+
+Repack copies the source ISO, then **re-encodes only the textures whose pixels
+actually changed** (detected by comparing each PNG's pixels to the hash recorded
+at unpack time). Each changed texture is encoded back to GVR and spliced into its
+archive, which is then AKLZ-recompressed and written into the output ISO.
+Untouched textures keep their original bytes exactly — no quality loss. It prints
+each texture it re-encodes, e.g. `+ title/ts900000.mld tex00.png`.
+
+**Caveats**
+- Editing is per-PNG; `--repack` needs the same `manifest.json`/`.bin` layout
+  produced by `--full-unpack`, so unpack and repack the same folder.
+- Lossy formats (DXT1/CMP) lose a little quality only on textures you edit;
+  unedited textures are never re-encoded.
+- For **mipmapped** textures, only the base (full-size) level is re-encoded; the
+  smaller mip levels keep their original pixels, so a heavy edit can look stale
+  when the texture is drawn small/at a distance.
+
 ## Exported Data Types
 
 | File | Description | Count |

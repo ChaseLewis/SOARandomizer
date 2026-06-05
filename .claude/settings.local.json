@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git submodule:*)",
+      "Bash(xargs grep:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo run:*)",
+      "Bash(python3 -c ':*)",
+      "Bash(node -e ':*)",
+      "Read(//c/Users/Chase/AppData/Local/Temp/ods_extract/**)",
+      "Bash(xxd -s 0x0B30 -l 256 /tmp/sct/me531a.sct)",
+      "Bash(xxd -s 0x44B08 -l 128 /tmp/sct/me531a.sct)",
+      "Bash(xxd -s 0x44B18 -l 128 /tmp/sct/me531a.sct)",
+      "Read(//c/Users/Chase/.claude/projects/e--Dev-SOARandomizer/memory/**)",
+      "Read(//c/Users/Chase/AppData/Local/Temp/sct/**)",
+      "Bash(xxd -l 512 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x44B00 -l 512 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x0B30 -l 512 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x44B18 -l 1024 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(python3 /tmp/decode_floats.py)",
+      "Bash(bash /tmp/decode.sh)",
+      "Bash(xxd -s 0x44B18 -l 256 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x44B8C -l 256 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(ls -lh *.ods)",
+      "Bash(xxd -s 0x44B18 -l 1200 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(bash /tmp/analyze_macros.sh)",
+      "Bash(xxd -s 0x44B40 -l 400 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x45B0 -l 256 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x0B50 -l 512 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x0B50 -l 64 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(bash /tmp/find_macro.sh)",
+      "Bash(xxd -s 0x44F00 -l 3072 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x44B00 -l 0x1400 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x44BA0 -l 64 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x45540 -l 64 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x44B90 -l 128 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(xxd -s 0x44B18 -l 0x74 \"C:/Users/Chase/AppData/Local/Temp/sct/me531a.sct\")",
+      "Bash(printf '%d\\\\n' $\\(\\(0x44B8C - 0x44B18\\)\\))",
+      "Bash(echo \"0x44B8C \\(MA5310001 start\\) - 0x44B18 \\(MA5310000 start\\) = $\\(printf '%d\\\\n' $\\(\\(0x44B8C - 0x44B18\\)\\)\\) bytes\")",
+      "Bash(xxd -l 512 /tmp/sct/me500a.sct)",
+      "Bash(xxd -s 0x04C0 -l 512 /tmp/sct/me500a.sct)",
+      "Bash(xxd -s 0x1AE54 -l 256 /tmp/sct/me500a.sct)"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
+  }
+}

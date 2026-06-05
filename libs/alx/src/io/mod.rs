@@ -5,6 +5,7 @@ mod binary;
 mod enp;
 mod enp_builder;
 mod enp_dump;
+mod gvr;
 mod iso;
 mod strings;
 
@@ -20,5 +21,6 @@ pub use enp_dump::{
     EnemyDefinition, EnemyDump, EnemyStatsDef, EnpDefinition, EnpDump, EventCharacterDef,
     EventDefinition, EventEnemyDef, EvpDefinition, EvpDump, HeaderEntry, ItemDropDef,
 };
+pub use gvr::{carve_textures, decode_gvr, encode_gvr, CarvedTexture, DecodedImage};
 pub use iso::{IsoFile, IsoFileEntry};
 pub use strings::{decode_windows1252, read_description_strings};

@@ -95,6 +95,24 @@ impl IsoFile {
         Ok(())
     }
 
+    /// Replace many files in the ISO in a single pass. Each pair is
+    /// `(path_within_iso, source_file_on_disk)`. Far cheaper than calling
+    /// [`replace_file`] in a loop, which rewrites the FST each time.
+    pub fn replace_files(&self, files: &[(PathBuf, PathBuf)]) -> Result<()> {
+        if files.is_empty() {
+            return Ok(());
+        }
+        let ops: Vec<gc_fst::IsoOp> = files
+            .iter()
+            .map(|(iso_path, input_path)| gc_fst::IsoOp::Insert {
+                iso_path,
+                input_path,
+            })
+            .collect();
+        gc_fst::operate_on_iso(self.path(), &ops)?;
+        Ok(())
+    }
+
     /// Write file data to a path in the ISO.
     /// This writes to a temp file and replaces the ISO file.
     pub fn write_file(&self, iso_path: &Path, data: &[u8]) -> Result<()> {

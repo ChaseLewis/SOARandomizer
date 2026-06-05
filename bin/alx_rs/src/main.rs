@@ -48,6 +48,31 @@ struct Args {
     #[arg(long)]
     dump_evp: bool,
 
+    /// List all files in the ISO filesystem
+    #[arg(long)]
+    list_files: bool,
+
+    /// Dump a file from the ISO as hex (substring match on filename)
+    /// Example: --dump-file r500a.tec
+    #[arg(long, value_name = "FILENAME")]
+    dump_file: Option<String>,
+
+    /// Extract a file from the ISO (decompresses AKLZ) to --output path
+    #[arg(long, value_name = "FILENAME")]
+    extract: Option<String>,
+
+    /// Unpack every .mld archive in the ISO into per-file folders containing
+    /// the decompressed blob, each GVR texture (.gvr + .png), and a
+    /// manifest.json describing how to repack. Pass the output directory.
+    #[arg(long, value_name = "OUTPUT_DIR")]
+    full_unpack: Option<PathBuf>,
+
+    /// Repack a folder produced by --full-unpack back into a copy of the ISO.
+    /// Pass the unpack directory; use --output for the target ISO path.
+    /// Only textures whose PNG actually changed are re-encoded.
+    #[arg(long, value_name = "UNPACK_DIR")]
+    repack: Option<PathBuf>,
+
     /// Skip confirmation prompts (auto-confirm overwrites)
     #[arg(short = 'y', long = "yes")]
     yes: bool,
@@ -80,6 +105,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!("ISO file not found: {}", args.iso_path.display()).into());
     }
 
+    // Check if we're in extract mode
+    if let Some(ref filename) = args.extract {
+        let output = args.output.as_deref().unwrap_or(Path::new("."));
+        return run_extract(&args.iso_path, filename, output);
+    }
+
+    // Check if we're in full-unpack mode
+    if let Some(ref out_dir) = args.full_unpack {
+        return run_full_unpack(&args.iso_path, out_dir);
+    }
+
+    // Check if we're in repack mode
+    if let Some(ref unpack_dir) = args.repack {
+        let output = args
+            .output
+            .as_deref()
+            .ok_or("--repack requires --output <ISO> for the target ISO path")?;
+        return run_repack(&args.iso_path, unpack_dir, output, args.yes);
+    }
+
+    // Check if we're in list-files mode
+    if args.list_files {
+        return run_list_files(&args.iso_path, args.output.as_deref());
+    }
+
+    // Check if we're in dump-file mode
+    if let Some(ref filename) = args.dump_file {
+        return run_dump_file(&args.iso_path, filename);
+    }
+
     // Check if we're in dump-enp mode
     if let Some(enp_name) = args.dump_enp {
         return run_dump_enp(&args.iso_path, &enp_name, args.output.as_deref());
@@ -102,6 +157,817 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Export mode
     run_export(&args.iso_path, args.output)
+}
+
+fn run_extract(
+    iso_path: &Path,
+    filename: &str,
+    output_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut iso = alx::io::IsoFile::open(iso_path)?;
+    let matching = iso.list_files_matching(filename)?;
+    if matching.is_empty() {
+        return Err(format!("No files matching '{}'", filename).into());
+    }
+    for entry in &matching {
+        let raw = iso.read_file_direct(entry)?;
+        let data = if raw.len() >= 4 && &raw[0..4] == b"AKLZ" {
+            let d = alx::io::decompress_aklz(&raw)?;
+            println!("Decompressed {} -> {} bytes", raw.len(), d.len());
+            d
+        } else {
+            raw
+        };
+        let out_file = if output_path.is_dir() {
+            output_path.join(entry.path.file_name().unwrap_or_default())
+        } else {
+            output_path.to_path_buf()
+        };
+        std::fs::write(&out_file, &data)?;
+        println!(
+            "Extracted {} to {}",
+            entry.path.display(),
+            out_file.display()
+        );
+    }
+    Ok(())
+}
+
+/// Write an RGBA8 image to a PNG file.
+fn write_png(
+    path: &Path,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let file = File::create(path)?;
+    let w = std::io::BufWriter::new(file);
+    let mut encoder = png::Encoder::new(w, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header()?;
+    writer.write_image_data(rgba)?;
+    Ok(())
+}
+
+/// JSON-escape a string for manual manifest writing.
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Unpack every `.mld` archive in the ISO into editable per-file folders.
+///
+/// For each `battle\foo.mld` the output is `<out_dir>/battle/foo/` containing:
+///   - `foo.bin`       the full AKLZ-decompressed archive (repack base)
+///   - `texNN.gvr`     each carved GVR texture (lossless source / inspection)
+///   - `texNN.png`     the decoded texture (editable; canonical edit source)
+///   - `manifest.json` the repack contract (offsets, formats, pixel CRC32s)
+fn run_full_unpack(iso_path: &Path, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{carve_textures, decode_gvr, decompress_aklz};
+
+    println!("ALX_RS - Full .mld Unpacker");
+    println!("==========================");
+    println!("ISO: {}", iso_path.display());
+    println!("Output: {}", out_dir.display());
+
+    let mut iso = alx::io::IsoFile::open(iso_path)?;
+    let all_files = iso.list_files()?;
+    let mld_files: Vec<_> = all_files
+        .into_iter()
+        .filter(|e| {
+            e.path
+                .file_name()
+                .map(|s| s.to_string_lossy().to_lowercase().ends_with(".mld"))
+                .unwrap_or(false)
+        })
+        .collect();
+
+    println!("Found {} .mld files\n", mld_files.len());
+
+    let mut mld_ok = 0usize;
+    let mut tex_total = 0usize;
+    let mut png_total = 0usize;
+    let mut png_skipped = 0usize;
+    let mut unsupported_formats: std::collections::BTreeSet<u8> = std::collections::BTreeSet::new();
+
+    for (n, entry) in mld_files.iter().enumerate() {
+        // ISO path uses backslashes; normalize to forward slashes for output.
+        let iso_path_str = entry.path.to_string_lossy().replace('\\', "/");
+        let stem = entry
+            .path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| format!("mld{n}"));
+        let parent = entry
+            .path
+            .parent()
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default();
+
+        // Output folder mirrors the ISO tree, with the .mld becoming a folder.
+        let mut folder = out_dir.to_path_buf();
+        if !parent.is_empty() {
+            for part in parent.split('/') {
+                folder.push(part);
+            }
+        }
+        folder.push(&stem);
+        fs::create_dir_all(&folder)?;
+
+        // Read and (if needed) AKLZ-decompress.
+        let raw = iso.read_file_direct(entry)?;
+        let was_aklz = raw.len() >= 4 && &raw[0..4] == b"AKLZ";
+        let blob = if was_aklz {
+            decompress_aklz(&raw)?
+        } else {
+            raw
+        };
+
+        // Write the decompressed blob (repack base).
+        let blob_name = format!("{stem}.bin");
+        fs::write(folder.join(&blob_name), &blob)?;
+
+        // Every file that belongs to this package. Repack only ever touches
+        // files listed here / referenced by a texture, so stray files an image
+        // editor may drop in (lock files, .tmp, backups) are ignored.
+        let mut package_files: Vec<String> = vec![blob_name.clone()];
+
+        // Carve and decode textures.
+        let textures = carve_textures(&blob);
+        tex_total += textures.len();
+
+        let mut tex_entries: Vec<String> = Vec::with_capacity(textures.len());
+        for (i, tex) in textures.iter().enumerate() {
+            let gvr_name = format!("tex{i:02}.gvr");
+            fs::write(folder.join(&gvr_name), &tex.gvr)?;
+            package_files.push(gvr_name.clone());
+
+            let mut decoded = false;
+            let mut crc_field = String::from("null");
+            let mut png_field = String::from("null");
+
+            match decode_gvr(&tex.gvr) {
+                Ok(img) => {
+                    let png_name = format!("tex{i:02}.png");
+                    write_png(&folder.join(&png_name), img.width, img.height, &img.rgba)?;
+                    package_files.push(png_name.clone());
+                    let crc = crc32fast::hash(&img.rgba);
+                    decoded = true;
+                    png_total += 1;
+                    crc_field = format!("\"0x{crc:08x}\"");
+                    png_field = format!("\"{}\"", json_escape(&png_name));
+                }
+                Err(_) => {
+                    png_skipped += 1;
+                    unsupported_formats.insert(tex.data_format);
+                }
+            }
+
+            tex_entries.push(format!(
+                "    {{ \"index\": {}, \"png\": {}, \"gvr\": \"{}\", \
+                 \"blob_offset\": {}, \"gvr_len\": {}, \
+                 \"data_format\": {}, \"pixel_flags\": {}, \
+                 \"width\": {}, \"height\": {}, \"global_index\": {}, \
+                 \"decoded\": {}, \"rgba_crc32\": {} }}",
+                i,
+                png_field,
+                json_escape(&gvr_name),
+                tex.blob_offset,
+                tex.gvr.len(),
+                tex.data_format,
+                tex.pixel_flags,
+                tex.width,
+                tex.height,
+                tex.global_index,
+                decoded,
+                crc_field,
+            ));
+        }
+
+        // Write the manifest (the --repack contract). `files` is the explicit
+        // allowlist of everything that makes up this package.
+        let files_list = package_files
+            .iter()
+            .map(|f| format!("\"{}\"", json_escape(f)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let manifest = format!(
+            "{{\n  \"iso_path\": \"{}\",\n  \"aklz\": {},\n  \"blob\": \"{}\",\n  \"files\": [{}],\n  \"textures\": [\n{}\n  ]\n}}\n",
+            json_escape(&iso_path_str),
+            was_aklz,
+            json_escape(&blob_name),
+            files_list,
+            tex_entries.join(",\n"),
+        );
+        fs::write(folder.join("manifest.json"), manifest)?;
+
+        mld_ok += 1;
+        if (n + 1) % 100 == 0 || n + 1 == mld_files.len() {
+            println!(
+                "  [{}/{}] {} ({} textures)",
+                n + 1,
+                mld_files.len(),
+                iso_path_str,
+                textures.len()
+            );
+        }
+    }
+
+    println!("\nDone.");
+    println!("  .mld unpacked: {mld_ok}");
+    println!("  textures carved: {tex_total}");
+    println!("  PNGs written: {png_total}");
+    println!("  PNGs skipped (unsupported): {png_skipped}");
+    if !unsupported_formats.is_empty() {
+        let fmts: Vec<String> = unsupported_formats
+            .iter()
+            .map(|f| format!("0x{f:02x}"))
+            .collect();
+        println!("  unsupported formats seen: {}", fmts.join(", "));
+    }
+
+    Ok(())
+}
+
+/// Read a PNG file as tightly-packed RGBA8.
+fn read_png_rgba(path: &Path) -> Result<(u32, u32, Vec<u8>), Box<dyn std::error::Error>> {
+    let file = File::open(path)?;
+    let mut decoder = png::Decoder::new(std::io::BufReader::new(file));
+    // Expand palettes/low-bit gray to 8-bit channels and drop 16-bit depth.
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info()?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf)?;
+    let data = &buf[..info.buffer_size()];
+    let (w, h) = (info.width, info.height);
+    let n = (w * h) as usize;
+
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => data.to_vec(),
+        png::ColorType::Rgb => {
+            let mut out = Vec::with_capacity(n * 4);
+            for px in data.chunks(3) {
+                out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+            }
+            out
+        }
+        png::ColorType::GrayscaleAlpha => {
+            let mut out = Vec::with_capacity(n * 4);
+            for px in data.chunks(2) {
+                out.extend_from_slice(&[px[0], px[0], px[0], px[1]]);
+            }
+            out
+        }
+        png::ColorType::Grayscale => {
+            let mut out = Vec::with_capacity(n * 4);
+            for &g in data {
+                out.extend_from_slice(&[g, g, g, 255]);
+            }
+            out
+        }
+        png::ColorType::Indexed => {
+            return Err(format!("unexpected indexed PNG after expand: {}", path.display()).into());
+        }
+    };
+    Ok((w, h, rgba))
+}
+
+/// Recursively collect every `manifest.json` under `dir`.
+fn collect_manifests(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_manifests(&path, out)?;
+        } else if path
+            .file_name()
+            .map(|n| n == "manifest.json")
+            .unwrap_or(false)
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Repack a `--full-unpack` directory back into a copy of the ISO.
+///
+/// Each `manifest.json` is the contract: the `.bin` blob is the base, and for
+/// every texture whose PNG's decoded pixels differ from the recorded
+/// `rgba_crc32`, the PNG is re-encoded to GVR and spliced back into the blob
+/// (in place, same byte length). Unchanged textures keep their original bytes,
+/// so untouched textures never lose quality. Only `.mld` with at least one
+/// changed texture are recompressed and written; everything else is inherited
+/// unchanged from the copied ISO. Stray files in a package folder are ignored
+/// because only manifest-referenced files are read.
+fn run_repack(
+    source_iso: &Path,
+    unpack_dir: &Path,
+    output_iso: &Path,
+    auto_confirm: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{compress_aklz, encode_gvr};
+
+    println!("ALX_RS - .mld Repacker");
+    println!("=====================");
+    println!("Source ISO: {}", source_iso.display());
+    println!("Unpack dir: {}", unpack_dir.display());
+    println!("Output ISO: {}", output_iso.display());
+
+    if !unpack_dir.exists() {
+        return Err(format!("Unpack directory not found: {}", unpack_dir.display()).into());
+    }
+
+    if output_iso.exists() && !auto_confirm {
+        println!("\nOutput file already exists: {}", output_iso.display());
+        if !confirm_overwrite()? {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    // Start from a fresh copy of the source ISO.
+    println!("\nCopying ISO to output path...");
+    fs::copy(source_iso, output_iso)?;
+    println!(
+        "  Copy complete ({:.1} GB)",
+        fs::metadata(output_iso)?.len() as f64 / 1_000_000_000.0
+    );
+
+    let mut manifests = Vec::new();
+    collect_manifests(unpack_dir, &mut manifests)?;
+    manifests.sort();
+    println!("Found {} packages\n", manifests.len());
+
+    // Temp area for recompressed .mld awaiting batch insertion.
+    let temp_root = std::env::temp_dir().join(format!(
+        "alx_repack_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    fs::create_dir_all(&temp_root)?;
+
+    let mut inserts: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut changed_tex = 0usize;
+    let mut changed_mld = 0usize;
+    let mut errors = 0usize;
+
+    for (mi, mpath) in manifests.iter().enumerate() {
+        let folder = mpath.parent().unwrap_or(unpack_dir);
+        let json: serde_json::Value = serde_json::from_str(&fs::read_to_string(mpath)?)?;
+
+        let iso_path = json["iso_path"]
+            .as_str()
+            .ok_or_else(|| format!("{}: missing iso_path", mpath.display()))?;
+        let aklz = json["aklz"].as_bool().unwrap_or(true);
+        let blob_name = json["blob"]
+            .as_str()
+            .ok_or_else(|| format!("{}: missing blob", mpath.display()))?;
+
+        let mut blob = fs::read(folder.join(blob_name))?;
+        let mut changed = false;
+
+        if let Some(textures) = json["textures"].as_array() {
+            for tex in textures {
+                if !tex["decoded"].as_bool().unwrap_or(false) {
+                    continue;
+                }
+                let png_name = match tex["png"].as_str() {
+                    Some(p) => p,
+                    None => continue,
+                };
+                let png_path = folder.join(png_name);
+                if !png_path.exists() {
+                    continue;
+                }
+                let off = tex["blob_offset"].as_u64().unwrap_or(0) as usize;
+                let len = tex["gvr_len"].as_u64().unwrap_or(0) as usize;
+                let expected = tex["rgba_crc32"]
+                    .as_str()
+                    .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok());
+
+                let (_, _, rgba) = read_png_rgba(&png_path)?;
+                let crc = crc32fast::hash(&rgba);
+                if Some(crc) == expected {
+                    continue; // pixels unchanged -> keep original bytes
+                }
+
+                if off + len > blob.len() {
+                    eprintln!(
+                        "  {} {}: texture range out of blob bounds; skipping",
+                        iso_path, png_name
+                    );
+                    errors += 1;
+                    continue;
+                }
+                let template = blob[off..off + len].to_vec();
+                match encode_gvr(&template, &rgba) {
+                    Ok(new_gvr) if new_gvr.len() == len => {
+                        blob[off..off + len].copy_from_slice(&new_gvr);
+                        changed = true;
+                        changed_tex += 1;
+                        println!("  + {} {}", iso_path, png_name);
+                    }
+                    Ok(_) => {
+                        eprintln!(
+                            "  {} {}: re-encoded size mismatch; skipping",
+                            iso_path, png_name
+                        );
+                        errors += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("  {} {}: {}", iso_path, png_name, e);
+                        errors += 1;
+                    }
+                }
+            }
+        }
+
+        if changed {
+            let final_bytes = if aklz { compress_aklz(&blob) } else { blob };
+            let tmp = temp_root.join(format!("repack_{changed_mld}.mld"));
+            fs::write(&tmp, &final_bytes)?;
+            inserts.push((PathBuf::from(iso_path), tmp));
+            changed_mld += 1;
+        }
+
+        if (mi + 1) % 200 == 0 || mi + 1 == manifests.len() {
+            println!("  scanned [{}/{}]", mi + 1, manifests.len());
+        }
+    }
+
+    if inserts.is_empty() {
+        println!("\nNo textures changed. Output ISO is a faithful copy of the source.");
+    } else {
+        println!(
+            "\nWriting {} changed .mld ({} textures) into the ISO...",
+            changed_mld, changed_tex
+        );
+        let iso = alx::io::IsoFile::open(output_iso)?;
+        iso.replace_files(&inserts)?;
+    }
+
+    let _ = fs::remove_dir_all(&temp_root);
+
+    println!("\nDone.");
+    println!("  packages scanned: {}", manifests.len());
+    println!("  .mld changed: {changed_mld}");
+    println!("  textures re-encoded: {changed_tex}");
+    if errors > 0 {
+        println!("  errors (textures skipped): {errors}");
+    }
+    println!("  output: {}", output_iso.display());
+
+    Ok(())
+}
+
+fn run_list_files(
+    iso_path: &Path,
+    output_path: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut iso = alx::io::IsoFile::open(iso_path)?;
+    let files = iso.list_files()?;
+
+    let mut output_lines = Vec::new();
+    for f in &files {
+        output_lines.push(format!(
+            "{:>10}  0x{:08X}  {}",
+            f.size,
+            f.offset,
+            f.path.display()
+        ));
+    }
+
+    let text = output_lines.join("\n");
+    if let Some(output) = output_path {
+        std::fs::write(output, &text)?;
+        println!("Listed {} files to {}", files.len(), output.display());
+    } else {
+        println!("{}", text);
+        println!("\n{} files total", files.len());
+    }
+
+    Ok(())
+}
+
+fn run_dump_file(iso_path: &Path, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Special mode: "search-dol:VALUE" to search for i16 patterns in Start.dol
+    if let Some(search_val) = filename.strip_prefix("search-dol:") {
+        return run_search_dol(iso_path, search_val);
+    }
+    // Special mode: "dol-range:START..END" to dump a DOL range
+    if let Some(range_str) = filename.strip_prefix("dol-range:") {
+        return run_dump_dol_range(iso_path, range_str);
+    }
+    // Special mode: "search-bytes:HEXBYTES" to search ISO files for byte pattern
+    if let Some(hex_str) = filename.strip_prefix("search-bytes:") {
+        return run_search_bytes(iso_path, hex_str);
+    }
+
+    let mut iso = alx::io::IsoFile::open(iso_path)?;
+    let matching = iso.list_files_matching(filename)?;
+
+    if matching.is_empty() {
+        return Err(format!("No files matching '{}'", filename).into());
+    }
+
+    for entry in &matching {
+        println!(
+            "=== {} (offset=0x{:08X}, size={}) ===",
+            entry.path.display(),
+            entry.offset,
+            entry.size
+        );
+
+        let raw_data = iso.read_file_direct(entry)?;
+
+        // Decompress AKLZ if applicable
+        let data = if raw_data.len() >= 4 && &raw_data[0..4] == b"AKLZ" {
+            let decompressed = alx::io::decompress_aklz(&raw_data)?;
+            println!(
+                "  (AKLZ compressed: {} -> {} bytes)",
+                raw_data.len(),
+                decompressed.len()
+            );
+            decompressed
+        } else {
+            raw_data
+        };
+
+        // Print hex dump (limited to first 512 bytes for sanity)
+        let limit = data.len().min(512);
+        for (i, chunk) in data[..limit].chunks(16).enumerate() {
+            let offset = i * 16;
+            // Hex part
+            let hex: Vec<String> = chunk.iter().map(|b| format!("{:02X}", b)).collect();
+            let hex_str = hex.join(" ");
+            // ASCII part
+            let ascii: String = chunk
+                .iter()
+                .map(|&b| {
+                    if (0x20..=0x7e).contains(&b) {
+                        b as char
+                    } else {
+                        '.'
+                    }
+                })
+                .collect();
+            println!("{:08X}  {:48}  {}", offset, hex_str, ascii);
+        }
+        if data.len() > limit {
+            println!("... ({} more bytes)", data.len() - limit);
+        }
+
+        // Also print as i16 big-endian values for the first 128 values
+        println!("\n--- As i16 BE values ---");
+        let i16_limit = data.len().min(256);
+        for (i, chunk) in data[..i16_limit].chunks(2).enumerate() {
+            if chunk.len() == 2 {
+                let val = i16::from_be_bytes([chunk[0], chunk[1]]);
+                if i % 8 == 0 {
+                    if i > 0 {
+                        println!();
+                    }
+                    print!("{:04X}: ", i * 2);
+                }
+                print!("{:>6} ", val);
+            }
+        }
+        println!("\n");
+    }
+
+    Ok(())
+}
+
+/// Search all files in the ISO for a byte pattern (hex string).
+fn run_search_bytes(iso_path: &Path, hex_str: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Parse hex string
+    let pattern: Vec<u8> = hex_str
+        .split_whitespace()
+        .flat_map(|s| {
+            (0..s.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
+    println!(
+        "Searching for pattern: {:02X?} ({} bytes)",
+        pattern,
+        pattern.len()
+    );
+
+    let mut iso = alx::io::IsoFile::open(iso_path)?;
+    let files = iso.list_files()?;
+
+    for entry in &files {
+        let path_str = entry.path.to_string_lossy().to_string();
+        // Skip very large files (models/textures)
+        if entry.size > 500_000 {
+            continue;
+        }
+
+        let raw_data = match iso.read_file_direct(entry) {
+            Ok(d) => d,
+            Err(_) => continue,
+        };
+
+        // Try decompressed if AKLZ
+        let data = if raw_data.len() >= 4 && &raw_data[0..4] == b"AKLZ" {
+            match alx::io::decompress_aklz(&raw_data) {
+                Ok(d) => d,
+                Err(_) => raw_data.clone(),
+            }
+        } else {
+            raw_data.clone()
+        };
+
+        // Search for pattern
+        for i in 0..data.len().saturating_sub(pattern.len()) {
+            if data[i..i + pattern.len()] == pattern[..] {
+                println!(
+                    "FOUND in {} at offset 0x{:04X} (file size: {}, decompressed: {})",
+                    path_str,
+                    i,
+                    entry.size,
+                    data.len()
+                );
+                // Show context
+                let ctx_start = i.saturating_sub(16);
+                let ctx_end = (i + pattern.len() + 16).min(data.len());
+                for (j, chunk) in data[ctx_start..ctx_end].chunks(16).enumerate() {
+                    let offset = ctx_start + j * 16;
+                    let hex: Vec<String> = chunk.iter().map(|b| format!("{:02X}", b)).collect();
+                    println!("  {:04X}: {}", offset, hex.join(" "));
+                }
+            }
+        }
+    }
+
+    println!("Search complete.");
+    Ok(())
+}
+
+/// Dump a range of Start.dol as i16 values
+fn run_dump_dol_range(iso_path: &Path, range_str: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let parts: Vec<&str> = range_str.split("..").collect();
+    if parts.len() != 2 {
+        return Err("Expected format: start..end (hex, e.g. 2d168c..2d29e8)".into());
+    }
+    let start = usize::from_str_radix(parts[0], 16)?;
+    let end = usize::from_str_radix(parts[1], 16)?;
+
+    let game = GameRoot::open(iso_path)?;
+    let dol_path = Path::new("Start.dol");
+    let data = game.iso().read_file(dol_path)?;
+
+    println!(
+        "Dumping DOL range 0x{:06X}..0x{:06X} ({} bytes)",
+        start,
+        end,
+        end - start
+    );
+    let slice = &data[start..end];
+
+    // Hex dump
+    for (i, chunk) in slice.chunks(16).enumerate() {
+        let offset = start + i * 16;
+        let hex: Vec<String> = chunk.iter().map(|b| format!("{:02X}", b)).collect();
+        let hex_str = hex.join(" ");
+        let ascii: String = chunk
+            .iter()
+            .map(|&b| {
+                if (0x20..=0x7e).contains(&b) {
+                    b as char
+                } else {
+                    '.'
+                }
+            })
+            .collect();
+        println!("{:06X}  {:48}  {}", offset, hex_str, ascii);
+    }
+
+    // As i16 values with alignment annotations
+    println!("\n--- As i16 BE values (8 per line) ---");
+    for (i, chunk) in slice.chunks(2).enumerate() {
+        if chunk.len() == 2 {
+            let offset = start + i * 2;
+            let val = i16::from_be_bytes([chunk[0], chunk[1]]);
+            if i % 8 == 0 {
+                if i > 0 {
+                    println!();
+                }
+                print!("{:06X}: ", offset);
+            }
+            print!("{:>6} ", val);
+        }
+    }
+    println!();
+
+    Ok(())
+}
+
+/// Search Start.dol for regions containing clusters of a specific i16 value.
+/// This helps find data tables with known default values.
+fn run_search_dol(iso_path: &Path, search_val: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let game = GameRoot::open(iso_path)?;
+    let dol_path = Path::new("Start.dol");
+    let data = game.iso().read_file(dol_path)?;
+
+    let target: i16 = search_val.parse()?;
+    let target_bytes = target.to_be_bytes();
+
+    println!(
+        "Searching Start.dol ({} bytes) for clusters of i16 value {}...",
+        data.len(),
+        target
+    );
+    println!(
+        "Target bytes: {:02X} {:02X}",
+        target_bytes[0], target_bytes[1]
+    );
+
+    // Find all positions where the target appears
+    let mut positions = Vec::new();
+    for i in 0..data.len() - 1 {
+        if data[i] == target_bytes[0] && data[i + 1] == target_bytes[1] {
+            positions.push(i);
+        }
+    }
+
+    println!("Found {} occurrences total", positions.len());
+
+    // Find clusters (groups of occurrences within 64 bytes of each other)
+    let mut cluster_start = 0;
+    let mut cluster_count = 1;
+    let mut clusters = Vec::new();
+
+    for i in 1..positions.len() {
+        if positions[i] - positions[i - 1] <= 64 {
+            cluster_count += 1;
+        } else {
+            if cluster_count >= 3 {
+                clusters.push((positions[cluster_start], positions[i - 1], cluster_count));
+            }
+            cluster_start = i;
+            cluster_count = 1;
+        }
+    }
+    if cluster_count >= 3 {
+        clusters.push((
+            positions[cluster_start],
+            *positions.last().unwrap(),
+            cluster_count,
+        ));
+    }
+
+    println!("\nClusters of 3+ occurrences within 64 bytes:");
+    for (start, end, count) in &clusters {
+        // Show context around the cluster
+        let ctx_start = start.saturating_sub(16);
+        let ctx_end = (end + 16).min(data.len());
+        println!(
+            "\n--- Cluster at 0x{:06X}..0x{:06X} ({} hits) ---",
+            start, end, count
+        );
+
+        // Print as i16 values
+        let aligned_start = ctx_start & !1; // align to 2-byte boundary
+        for (i, chunk) in data[aligned_start..ctx_end].chunks(2).enumerate() {
+            if chunk.len() == 2 {
+                let offset = aligned_start + i * 2;
+                let val = i16::from_be_bytes([chunk[0], chunk[1]]);
+                if i % 16 == 0 {
+                    if i > 0 {
+                        println!();
+                    }
+                    print!("{:06X}: ", offset);
+                }
+                if val == target {
+                    print!("[{:>4}]", val);
+                } else {
+                    print!(" {:>4} ", val);
+                }
+            }
+        }
+        println!();
+    }
+
+    Ok(())
 }
 
 fn run_export(iso_path: &Path, output: Option<PathBuf>) -> Result<(), Box<dyn std::error::Error>> {
