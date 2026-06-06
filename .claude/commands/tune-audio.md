@@ -37,8 +37,10 @@ The tool is `dcaudio2gcaudio` (in `bin/dcaudio2gcaudio`). State lives in `audio_
 
 7. **Accept or revert.**
    - **Accept** iff the build is green AND the new global score is better than `best`:
-     update `state.json` (`best`, `iter += 1`, append to `history`), and every 10 accepted
-     iterations copy the tuned GC data to `audio_tuning/best/`.
+     update `state.json` (`best`, `iter += 1`, append to `history`), every 10 accepted
+     iterations copy the tuned GC data to `audio_tuning/best/`, and **commit locally**
+     (never push): `git add -A && git commit -m "tune: <what changed> (score X→Y)"`. The
+     commit history is your revertible checkpoint trail.
    - **Otherwise REVERT**: `git restore` the files you changed (and discard any param edits)
      so the working tree returns to best-so-far. The working tree must ALWAYS hold the best
      result.
@@ -54,8 +56,9 @@ The tool is `dcaudio2gcaudio` (in `bin/dcaudio2gcaudio`). State lives in `audio_
 
 ## Guardrails (hard rules)
 - **Never** accept a change that breaks the build or worsens the global score.
-- **Never** `git commit`, push, or run destructive git (`reset --hard`, `clean`, force) —
-  revert only via `git restore` of files you touched this iteration.
+- Commit each **accepted** iteration locally; **never** `git push` (it's hard-blocked by
+  settings) and never run destructive git (`reset --hard`, `clean`, force). Revert a
+  rejected change via `git restore` of the files you touched this iteration.
 - One change per iteration; keep diffs small and reviewable.
 - The scorer must stay **deterministic** (seeded); don't introduce randomness into scoring.
 - The metric optimizes the **tunable** subspace (levels/pan/balance). Do **not** chase the

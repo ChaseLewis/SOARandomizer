@@ -1,6 +1,8 @@
 {
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
+      "Bash",
       "Bash(git submodule:*)",
       "Bash(xargs grep:*)",
       "Bash(cargo build:*)",
