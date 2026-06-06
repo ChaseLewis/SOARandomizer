@@ -290,4 +290,68 @@ impl IsoFile {
     pub fn read_file_direct(&mut self, entry: &IsoFileEntry) -> Result<Vec<u8>> {
         self.read_bytes_at(entry.offset as u64, entry.size as usize)
     }
+
+    /// Extract the three `&&systemdata` files needed to rebuild a disc from
+    /// scratch (`ISO.hdr`, `AppLoader.ldr`, `Start.dol`) into `dest`.
+    ///
+    /// Byte ranges mirror `gc_fst::read_iso`:
+    /// - `ISO.hdr`        = `iso[0 .. 0x2440]`
+    /// - `AppLoader.ldr`  = `iso[0x2440 .. 0x2440 + align(code@0x2454 + trailer@0x2458, 5)]`
+    /// - `Start.dol`      = `iso[dol_off .. dol_off + dol_size]`, where
+    ///   `dol_off = u32@0x420` and `dol_size` is the max segment end over the
+    ///   18 text/data segments (offsets at `dol+i*4`, sizes at `dol+0x90+i*4`).
+    pub fn extract_system_files(&mut self, dest: &Path) -> Result<()> {
+        std::fs::create_dir_all(dest)?;
+
+        // ISO.hdr (boot.bin + bi2.bin)
+        let iso_hdr = self.read_bytes_at(0, 0x2440)?;
+        std::fs::write(dest.join("ISO.hdr"), &iso_hdr)?;
+
+        // AppLoader.ldr. Its size fields live at the start of the apploader
+        // region (absolute 0x2454 / 0x2458), just past ISO.hdr. Length matches
+        // gc_fst::read_iso exactly (its inverse, write_iso, is our builder).
+        let apploader_hdr = self.read_bytes_at(0x2440, 0x20)?;
+        let code_size = u32::from_be_bytes(apploader_hdr[0x14..0x18].try_into().unwrap());
+        let trailer_size = u32::from_be_bytes(apploader_hdr[0x18..0x1C].try_into().unwrap());
+        let apploader_size = align_up(code_size + trailer_size, 5) as usize;
+        let apploader = self.read_bytes_at(0x2440, apploader_size)?;
+        std::fs::write(dest.join("AppLoader.ldr"), &apploader)?;
+
+        // Start.dol
+        let dol_offset = self.read_dol_offset()? as u64;
+        let dol_header = self.read_bytes_at(dol_offset, 0x100)?;
+        let mut dol_size = 0u32;
+        for i in 0..18u64 {
+            let seg_off = u32::from_be_bytes(
+                dol_header[(i * 4) as usize..(i * 4 + 4) as usize]
+                    .try_into()
+                    .unwrap(),
+            );
+            let seg_size = u32::from_be_bytes(
+                dol_header[(0x90 + i * 4) as usize..(0x90 + i * 4 + 4) as usize]
+                    .try_into()
+                    .unwrap(),
+            );
+            dol_size = dol_size.max(seg_off + seg_size);
+        }
+        let dol = self.read_bytes_at(dol_offset, dol_size as usize)?;
+        std::fs::write(dest.join("Start.dol"), &dol)?;
+
+        Ok(())
+    }
+}
+
+/// Round `n` up to a multiple of `1 << bits` (matches `gc_fst::align`).
+fn align_up(n: u32, bits: u32) -> u32 {
+    let mask = (1 << bits) - 1;
+    (n + mask) & !mask
+}
+
+/// Build a complete GameCube ISO from a directory tree produced for rebuilding.
+///
+/// `root` must contain an `&&systemdata/` folder with `ISO.hdr`,
+/// `AppLoader.ldr`, and `Start.dol`, plus the disc's file tree. Returns the
+/// full ISO image bytes. Thin wrapper over [`gc_fst::write_iso`].
+pub fn build_iso(root: &Path) -> Result<Vec<u8>> {
+    gc_fst::write_iso(root).map_err(|e| crate::error::Error::IsoOperationError(format!("{:?}", e)))
 }

@@ -4,3 +4,12 @@
 [submodule "submodules/gc_fst"]
 	path = submodules/gc_fst
 	url = https://github.com/AlexanderHarrison/gc_fst.git
+[submodule "submodules/manatools"]
+	path = submodules/manatools
+	url = https://github.com/dakrk/manatools.git
+[submodule "submodules/es-dsp-adpcm-tool"]
+	path = submodules/es-dsp-adpcm-tool
+	url = https://github.com/eurotools/es-dsp-adpcm-tool.git
+[submodule "submodules/dsptool"]
+	path = submodules/dsptool
+	url = https://github.com/Thealexbarney/DspTool.git

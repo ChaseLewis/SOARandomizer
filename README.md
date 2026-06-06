@@ -136,6 +136,50 @@ each texture it re-encodes, e.g. `+ title/ts900000.mld tex00.png`.
   smaller mip levels keep their original pixels, so a heavy edit can look stale
   when the texture is drawn small/at a distance.
 
+## Full ISO Unpack / Rebuild (`--unpack-iso` / `--build-iso`)
+
+Most of the disc is AKLZ-compressed (scripts, models, UI, …). These commands
+unpack **every** file — decompressed so you can inspect script/text files
+directly — and rebuild a complete, runnable ISO **from scratch** (no source ISO
+needed at build time).
+
+### Unpack the whole ISO
+
+```bash
+alx_rs "path/to/game.iso" --unpack-iso unpacked_iso
+```
+
+Produces an editable tree:
+
+| Path | Description |
+|------|-------------|
+| `files/…` | Every non-`.mld` file, AKLZ-**decompressed** (e.g. `files/field/me002a.sct` is the readable 188 KB script). Edit these freely — even to a different length. |
+| `mld/<path>/` | Each `.mld`'s textures as PNGs (same format as `--full-unpack`: `.bin`, `texNN.png`, `manifest.json`). |
+| `cache/…` | Each AKLZ file's **original compressed** bytes, used to rebuild unchanged files instantly and byte-exact. |
+| `&&systemdata/` | `ISO.hdr`, `AppLoader.ldr`, `Start.dol` — the system files needed to rebuild. |
+| `metadata.json` | Lists every file with a CRC32 of its decompressed content (the rebuild contract + allowlist). |
+
+### Rebuild the ISO from scratch
+
+```bash
+alx_rs --build-iso unpacked_iso --output "rebuilt.iso" -y
+```
+
+No source ISO argument is required. For each file, `--build-iso` reconstructs the
+decompressed content (splicing any edited `.mld` textures), then: if the CRC32
+still matches `metadata.json` it **reuses the cached compressed bytes** (fast,
+byte-exact); otherwise it **recompresses** the edited content. Files may change
+size — the filesystem is rebuilt from scratch — so edited scripts of any length
+are fine. The build reports how many files were reused vs recompressed.
+
+**Notes**
+- A no-edit rebuild reproduces every file's content byte-for-byte; the rebuilt
+  ISO is slightly larger than the original due to 32 KB file alignment.
+- Recompressing is the slow part, so unedited files always reuse the cache —
+  keep the `cache/` folder for fast rebuilds.
+- `--full-unpack` / `--repack` (texture-only, in-place) remain available for quick
+  texture-only edits without touching the rest of the disc.
+
 ## Exported Data Types
 
 | File | Description | Count |

@@ -22,5 +22,5 @@ pub use enp_dump::{
     EventDefinition, EventEnemyDef, EvpDefinition, EvpDump, HeaderEntry, ItemDropDef,
 };
 pub use gvr::{carve_textures, decode_gvr, encode_gvr, CarvedTexture, DecodedImage};
-pub use iso::{IsoFile, IsoFileEntry};
+pub use iso::{build_iso, IsoFile, IsoFileEntry};
 pub use strings::{decode_windows1252, read_description_strings};

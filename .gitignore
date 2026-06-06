@@ -1,3 +1,8 @@
 roms/
 target/
 .archive-tool/
+
+# Audio-tuning loop: keep state.json + changelog.md, ignore bulky artifacts
+audio_tuning/scores/
+audio_tuning/best/
+audio_tuning/*.wav

@@ -25,9 +25,10 @@ macro_rules! export_csv {
 #[command(version = "0.1.0")]
 #[command(about = "Exports/imports Skies of Arcadia game data to/from CSV files", long_about = None)]
 struct Args {
-    /// Path to the GameCube ISO file
+    /// Path to the GameCube ISO file. Optional only for --build-iso, which
+    /// rebuilds from an unpack directory and needs no source ISO.
     #[arg(value_name = "ISO_FILE")]
-    iso_path: PathBuf,
+    iso_path: Option<PathBuf>,
 
     /// Output directory for CSV files (export mode), or output ISO path (import mode)
     #[arg(short, long, value_name = "PATH")]
@@ -73,6 +74,19 @@ struct Args {
     #[arg(long, value_name = "UNPACK_DIR")]
     repack: Option<PathBuf>,
 
+    /// Unpack the ENTIRE ISO into an editable tree: every file decompressed
+    /// (AKLZ) under files/, each .mld's textures under mld/, original compressed
+    /// bytes cached under cache/, system files under &&systemdata/, plus a
+    /// metadata.json. Rebuild later with --build-iso. Pass the output directory.
+    #[arg(long, value_name = "OUTPUT_DIR")]
+    unpack_iso: Option<PathBuf>,
+
+    /// Rebuild a complete ISO from scratch from a --unpack-iso directory (no
+    /// source ISO needed). Pass the unpack directory; use --output for the
+    /// target ISO path. Unedited files reuse cached compressed bytes.
+    #[arg(long, value_name = "UNPACK_DIR")]
+    build_iso: Option<PathBuf>,
+
     /// Skip confirmation prompts (auto-confirm overwrites)
     #[arg(short = 'y', long = "yes")]
     yes: bool,
@@ -100,20 +114,39 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    // Validate ISO path
-    if !args.iso_path.exists() {
-        return Err(format!("ISO file not found: {}", args.iso_path.display()).into());
+    // --build-iso rebuilds from an unpack directory and needs no source ISO,
+    // so handle it before requiring the ISO_FILE argument.
+    if let Some(ref unpack_dir) = args.build_iso {
+        let output = args
+            .output
+            .as_deref()
+            .ok_or("--build-iso requires --output <ISO> for the target ISO path")?;
+        return run_build_iso(unpack_dir, output, args.yes);
+    }
+
+    // Every other command needs a source ISO.
+    let iso_path = args
+        .iso_path
+        .as_deref()
+        .ok_or("ISO_FILE argument is required")?;
+    if !iso_path.exists() {
+        return Err(format!("ISO file not found: {}", iso_path.display()).into());
     }
 
     // Check if we're in extract mode
     if let Some(ref filename) = args.extract {
         let output = args.output.as_deref().unwrap_or(Path::new("."));
-        return run_extract(&args.iso_path, filename, output);
+        return run_extract(iso_path, filename, output);
     }
 
     // Check if we're in full-unpack mode
     if let Some(ref out_dir) = args.full_unpack {
-        return run_full_unpack(&args.iso_path, out_dir);
+        return run_full_unpack(iso_path, out_dir);
+    }
+
+    // Check if we're in unpack-iso mode (full ISO -> editable tree)
+    if let Some(ref out_dir) = args.unpack_iso {
+        return run_unpack_iso(iso_path, out_dir);
     }
 
     // Check if we're in repack mode
@@ -122,41 +155,36 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             .output
             .as_deref()
             .ok_or("--repack requires --output <ISO> for the target ISO path")?;
-        return run_repack(&args.iso_path, unpack_dir, output, args.yes);
+        return run_repack(iso_path, unpack_dir, output, args.yes);
     }
 
     // Check if we're in list-files mode
     if args.list_files {
-        return run_list_files(&args.iso_path, args.output.as_deref());
+        return run_list_files(iso_path, args.output.as_deref());
     }
 
     // Check if we're in dump-file mode
     if let Some(ref filename) = args.dump_file {
-        return run_dump_file(&args.iso_path, filename);
+        return run_dump_file(iso_path, filename);
     }
 
     // Check if we're in dump-enp mode
     if let Some(enp_name) = args.dump_enp {
-        return run_dump_enp(&args.iso_path, &enp_name, args.output.as_deref());
+        return run_dump_enp(iso_path, &enp_name, args.output.as_deref());
     }
 
     // Check if we're in dump-evp mode
     if args.dump_evp {
-        return run_dump_evp(&args.iso_path, args.output.as_deref());
+        return run_dump_evp(iso_path, args.output.as_deref());
     }
 
     // Check if we're in import mode
     if let Some(import_dir) = args.import {
-        return run_import(
-            &args.iso_path,
-            &import_dir,
-            args.output.as_deref(),
-            args.yes,
-        );
+        return run_import(iso_path, &import_dir, args.output.as_deref(), args.yes);
     }
 
     // Export mode
-    run_export(&args.iso_path, args.output)
+    run_export(iso_path, args.output)
 }
 
 fn run_extract(
@@ -226,6 +254,182 @@ fn json_escape(s: &str) -> String {
     out
 }
 
+/// Result of unpacking one `.mld` into its texture folder.
+#[derive(Default)]
+struct MldUnpackStats {
+    textures: usize,
+    pngs: usize,
+    skipped: usize,
+    unsupported: std::collections::BTreeSet<u8>,
+}
+
+/// Unpack one decompressed `.mld` blob into `folder`: writes `<stem>.bin`, each
+/// `texNN.gvr` + decoded `texNN.png`, and a `manifest.json` (the repack
+/// contract, with a `files` allowlist and per-texture `rgba_crc32`).
+///
+/// Shared by `--full-unpack` and `--unpack-iso`.
+fn unpack_mld_folder(
+    folder: &Path,
+    stem: &str,
+    iso_path_str: &str,
+    blob: &[u8],
+    aklz: bool,
+) -> Result<MldUnpackStats, Box<dyn std::error::Error>> {
+    use alx::io::{carve_textures, decode_gvr};
+
+    fs::create_dir_all(folder)?;
+
+    let blob_name = format!("{stem}.bin");
+    fs::write(folder.join(&blob_name), blob)?;
+
+    // Every file that belongs to this package. Repack only ever touches files
+    // listed here / referenced by a texture, so stray files an image editor may
+    // drop in (lock files, .tmp, backups) are ignored.
+    let mut package_files: Vec<String> = vec![blob_name.clone()];
+    let mut stats = MldUnpackStats::default();
+
+    let textures = carve_textures(blob);
+    stats.textures = textures.len();
+
+    let mut tex_entries: Vec<String> = Vec::with_capacity(textures.len());
+    for (i, tex) in textures.iter().enumerate() {
+        let gvr_name = format!("tex{i:02}.gvr");
+        fs::write(folder.join(&gvr_name), &tex.gvr)?;
+        package_files.push(gvr_name.clone());
+
+        let mut decoded = false;
+        let mut crc_field = String::from("null");
+        let mut png_field = String::from("null");
+
+        match decode_gvr(&tex.gvr) {
+            Ok(img) => {
+                let png_name = format!("tex{i:02}.png");
+                write_png(&folder.join(&png_name), img.width, img.height, &img.rgba)?;
+                package_files.push(png_name.clone());
+                let crc = crc32fast::hash(&img.rgba);
+                decoded = true;
+                stats.pngs += 1;
+                crc_field = format!("\"0x{crc:08x}\"");
+                png_field = format!("\"{}\"", json_escape(&png_name));
+            }
+            Err(_) => {
+                stats.skipped += 1;
+                stats.unsupported.insert(tex.data_format);
+            }
+        }
+
+        tex_entries.push(format!(
+            "    {{ \"index\": {}, \"png\": {}, \"gvr\": \"{}\", \
+             \"blob_offset\": {}, \"gvr_len\": {}, \
+             \"data_format\": {}, \"pixel_flags\": {}, \
+             \"width\": {}, \"height\": {}, \"global_index\": {}, \
+             \"decoded\": {}, \"rgba_crc32\": {} }}",
+            i,
+            png_field,
+            json_escape(&gvr_name),
+            tex.blob_offset,
+            tex.gvr.len(),
+            tex.data_format,
+            tex.pixel_flags,
+            tex.width,
+            tex.height,
+            tex.global_index,
+            decoded,
+            crc_field,
+        ));
+    }
+
+    let files_list = package_files
+        .iter()
+        .map(|f| format!("\"{}\"", json_escape(f)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let manifest = format!(
+        "{{\n  \"iso_path\": \"{}\",\n  \"aklz\": {},\n  \"blob\": \"{}\",\n  \"files\": [{}],\n  \"textures\": [\n{}\n  ]\n}}\n",
+        json_escape(iso_path_str),
+        aklz,
+        json_escape(&blob_name),
+        files_list,
+        tex_entries.join(",\n"),
+    );
+    fs::write(folder.join("manifest.json"), manifest)?;
+
+    Ok(stats)
+}
+
+/// Reconstruct a `.mld`'s decompressed blob from its unpack `folder` + parsed
+/// `manifest.json`: starts from `<blob>.bin` and, for every texture whose PNG's
+/// pixels differ from the recorded `rgba_crc32`, re-encodes it to GVR and
+/// splices it back in place. Returns `(blob, changed_textures, errors)`.
+///
+/// Shared by `--repack` and `--build-iso`.
+fn rebuild_mld_blob(
+    folder: &Path,
+    manifest: &serde_json::Value,
+) -> Result<(Vec<u8>, usize, usize), Box<dyn std::error::Error>> {
+    use alx::io::encode_gvr;
+
+    let iso_path = manifest["iso_path"].as_str().unwrap_or("<unknown>");
+    let blob_name = manifest["blob"]
+        .as_str()
+        .ok_or_else(|| format!("{}: manifest missing blob", folder.display()))?;
+    let mut blob = fs::read(folder.join(blob_name))?;
+
+    let mut changed = 0usize;
+    let mut errors = 0usize;
+
+    if let Some(textures) = manifest["textures"].as_array() {
+        for tex in textures {
+            if !tex["decoded"].as_bool().unwrap_or(false) {
+                continue;
+            }
+            let png_name = match tex["png"].as_str() {
+                Some(p) => p,
+                None => continue,
+            };
+            let png_path = folder.join(png_name);
+            if !png_path.exists() {
+                continue;
+            }
+            let off = tex["blob_offset"].as_u64().unwrap_or(0) as usize;
+            let len = tex["gvr_len"].as_u64().unwrap_or(0) as usize;
+            let expected = tex["rgba_crc32"]
+                .as_str()
+                .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok());
+
+            let (_, _, rgba) = read_png_rgba(&png_path)?;
+            let crc = crc32fast::hash(&rgba);
+            if Some(crc) == expected {
+                continue; // pixels unchanged -> keep original bytes
+            }
+
+            if off + len > blob.len() {
+                eprintln!("  {iso_path} {png_name}: texture range out of blob bounds; skipping");
+                errors += 1;
+                continue;
+            }
+            let template = blob[off..off + len].to_vec();
+            match encode_gvr(&template, &rgba) {
+                Ok(new_gvr) if new_gvr.len() == len => {
+                    blob[off..off + len].copy_from_slice(&new_gvr);
+                    changed += 1;
+                    println!("  + {iso_path} {png_name}");
+                }
+                Ok(_) => {
+                    eprintln!("  {iso_path} {png_name}: re-encoded size mismatch; skipping");
+                    errors += 1;
+                }
+                Err(e) => {
+                    eprintln!("  {iso_path} {png_name}: {e}");
+                    errors += 1;
+                }
+            }
+        }
+    }
+
+    Ok((blob, changed, errors))
+}
+
 /// Unpack every `.mld` archive in the ISO into editable per-file folders.
 ///
 /// For each `battle\foo.mld` the output is `<out_dir>/battle/foo/` containing:
@@ -234,7 +438,7 @@ fn json_escape(s: &str) -> String {
 ///   - `texNN.png`     the decoded texture (editable; canonical edit source)
 ///   - `manifest.json` the repack contract (offsets, formats, pixel CRC32s)
 fn run_full_unpack(iso_path: &Path, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    use alx::io::{carve_textures, decode_gvr, decompress_aklz};
+    use alx::io::decompress_aklz;
 
     println!("ALX_RS - Full .mld Unpacker");
     println!("==========================");
@@ -283,7 +487,6 @@ fn run_full_unpack(iso_path: &Path, out_dir: &Path) -> Result<(), Box<dyn std::e
             }
         }
         folder.push(&stem);
-        fs::create_dir_all(&folder)?;
 
         // Read and (if needed) AKLZ-decompress.
         let raw = iso.read_file_direct(entry)?;
@@ -294,83 +497,11 @@ fn run_full_unpack(iso_path: &Path, out_dir: &Path) -> Result<(), Box<dyn std::e
             raw
         };
 
-        // Write the decompressed blob (repack base).
-        let blob_name = format!("{stem}.bin");
-        fs::write(folder.join(&blob_name), &blob)?;
-
-        // Every file that belongs to this package. Repack only ever touches
-        // files listed here / referenced by a texture, so stray files an image
-        // editor may drop in (lock files, .tmp, backups) are ignored.
-        let mut package_files: Vec<String> = vec![blob_name.clone()];
-
-        // Carve and decode textures.
-        let textures = carve_textures(&blob);
-        tex_total += textures.len();
-
-        let mut tex_entries: Vec<String> = Vec::with_capacity(textures.len());
-        for (i, tex) in textures.iter().enumerate() {
-            let gvr_name = format!("tex{i:02}.gvr");
-            fs::write(folder.join(&gvr_name), &tex.gvr)?;
-            package_files.push(gvr_name.clone());
-
-            let mut decoded = false;
-            let mut crc_field = String::from("null");
-            let mut png_field = String::from("null");
-
-            match decode_gvr(&tex.gvr) {
-                Ok(img) => {
-                    let png_name = format!("tex{i:02}.png");
-                    write_png(&folder.join(&png_name), img.width, img.height, &img.rgba)?;
-                    package_files.push(png_name.clone());
-                    let crc = crc32fast::hash(&img.rgba);
-                    decoded = true;
-                    png_total += 1;
-                    crc_field = format!("\"0x{crc:08x}\"");
-                    png_field = format!("\"{}\"", json_escape(&png_name));
-                }
-                Err(_) => {
-                    png_skipped += 1;
-                    unsupported_formats.insert(tex.data_format);
-                }
-            }
-
-            tex_entries.push(format!(
-                "    {{ \"index\": {}, \"png\": {}, \"gvr\": \"{}\", \
-                 \"blob_offset\": {}, \"gvr_len\": {}, \
-                 \"data_format\": {}, \"pixel_flags\": {}, \
-                 \"width\": {}, \"height\": {}, \"global_index\": {}, \
-                 \"decoded\": {}, \"rgba_crc32\": {} }}",
-                i,
-                png_field,
-                json_escape(&gvr_name),
-                tex.blob_offset,
-                tex.gvr.len(),
-                tex.data_format,
-                tex.pixel_flags,
-                tex.width,
-                tex.height,
-                tex.global_index,
-                decoded,
-                crc_field,
-            ));
-        }
-
-        // Write the manifest (the --repack contract). `files` is the explicit
-        // allowlist of everything that makes up this package.
-        let files_list = package_files
-            .iter()
-            .map(|f| format!("\"{}\"", json_escape(f)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let manifest = format!(
-            "{{\n  \"iso_path\": \"{}\",\n  \"aklz\": {},\n  \"blob\": \"{}\",\n  \"files\": [{}],\n  \"textures\": [\n{}\n  ]\n}}\n",
-            json_escape(&iso_path_str),
-            was_aklz,
-            json_escape(&blob_name),
-            files_list,
-            tex_entries.join(",\n"),
-        );
-        fs::write(folder.join("manifest.json"), manifest)?;
+        let stats = unpack_mld_folder(&folder, &stem, &iso_path_str, &blob, was_aklz)?;
+        tex_total += stats.textures;
+        png_total += stats.pngs;
+        png_skipped += stats.skipped;
+        unsupported_formats.extend(stats.unsupported);
 
         mld_ok += 1;
         if (n + 1) % 100 == 0 || n + 1 == mld_files.len() {
@@ -379,7 +510,7 @@ fn run_full_unpack(iso_path: &Path, out_dir: &Path) -> Result<(), Box<dyn std::e
                 n + 1,
                 mld_files.len(),
                 iso_path_str,
-                textures.len()
+                stats.textures
             );
         }
     }
@@ -477,7 +608,7 @@ fn run_repack(
     output_iso: &Path,
     auto_confirm: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use alx::io::{compress_aklz, encode_gvr};
+    use alx::io::compress_aklz;
 
     println!("ALX_RS - .mld Repacker");
     println!("=====================");
@@ -533,70 +664,12 @@ fn run_repack(
             .as_str()
             .ok_or_else(|| format!("{}: missing iso_path", mpath.display()))?;
         let aklz = json["aklz"].as_bool().unwrap_or(true);
-        let blob_name = json["blob"]
-            .as_str()
-            .ok_or_else(|| format!("{}: missing blob", mpath.display()))?;
 
-        let mut blob = fs::read(folder.join(blob_name))?;
-        let mut changed = false;
+        let (blob, changed, errs) = rebuild_mld_blob(folder, &json)?;
+        changed_tex += changed;
+        errors += errs;
 
-        if let Some(textures) = json["textures"].as_array() {
-            for tex in textures {
-                if !tex["decoded"].as_bool().unwrap_or(false) {
-                    continue;
-                }
-                let png_name = match tex["png"].as_str() {
-                    Some(p) => p,
-                    None => continue,
-                };
-                let png_path = folder.join(png_name);
-                if !png_path.exists() {
-                    continue;
-                }
-                let off = tex["blob_offset"].as_u64().unwrap_or(0) as usize;
-                let len = tex["gvr_len"].as_u64().unwrap_or(0) as usize;
-                let expected = tex["rgba_crc32"]
-                    .as_str()
-                    .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok());
-
-                let (_, _, rgba) = read_png_rgba(&png_path)?;
-                let crc = crc32fast::hash(&rgba);
-                if Some(crc) == expected {
-                    continue; // pixels unchanged -> keep original bytes
-                }
-
-                if off + len > blob.len() {
-                    eprintln!(
-                        "  {} {}: texture range out of blob bounds; skipping",
-                        iso_path, png_name
-                    );
-                    errors += 1;
-                    continue;
-                }
-                let template = blob[off..off + len].to_vec();
-                match encode_gvr(&template, &rgba) {
-                    Ok(new_gvr) if new_gvr.len() == len => {
-                        blob[off..off + len].copy_from_slice(&new_gvr);
-                        changed = true;
-                        changed_tex += 1;
-                        println!("  + {} {}", iso_path, png_name);
-                    }
-                    Ok(_) => {
-                        eprintln!(
-                            "  {} {}: re-encoded size mismatch; skipping",
-                            iso_path, png_name
-                        );
-                        errors += 1;
-                    }
-                    Err(e) => {
-                        eprintln!("  {} {}: {}", iso_path, png_name, e);
-                        errors += 1;
-                    }
-                }
-            }
-        }
-
-        if changed {
+        if changed > 0 {
             let final_bytes = if aklz { compress_aklz(&blob) } else { blob };
             let tmp = temp_root.join(format!("repack_{changed_mld}.mld"));
             fs::write(&tmp, &final_bytes)?;
@@ -630,6 +703,254 @@ fn run_repack(
         println!("  errors (textures skipped): {errors}");
     }
     println!("  output: {}", output_iso.display());
+
+    Ok(())
+}
+
+/// Join a forward-slash-separated relative ISO path onto a base directory.
+fn rel_join(base: &Path, rel: &str) -> PathBuf {
+    let mut p = base.to_path_buf();
+    for part in rel.split('/') {
+        if !part.is_empty() {
+            p.push(part);
+        }
+    }
+    p
+}
+
+/// Ensure the parent directory of `path` exists.
+fn ensure_parent(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    Ok(())
+}
+
+/// Unpack the ENTIRE ISO into an editable tree (see `--unpack-iso`).
+fn run_unpack_iso(iso_path: &Path, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{decompress_aklz, is_aklz};
+
+    println!("ALX_RS - Full ISO Unpacker");
+    println!("==========================");
+    println!("ISO: {}", iso_path.display());
+    println!("Output: {}", out_dir.display());
+
+    let mut iso = alx::io::IsoFile::open(iso_path)?;
+
+    // System files needed for a from-scratch rebuild.
+    iso.extract_system_files(&out_dir.join("&&systemdata"))?;
+
+    let files = iso.list_files()?;
+    println!("Found {} files\n", files.len());
+
+    let files_dir = out_dir.join("files");
+    let mld_dir = out_dir.join("mld");
+    let cache_dir = out_dir.join("cache");
+
+    let mut meta_entries: Vec<String> = Vec::with_capacity(files.len());
+    let mut n_mld = 0usize;
+    let mut n_aklz = 0usize;
+    let mut tex_total = 0usize;
+
+    for (n, entry) in files.iter().enumerate() {
+        let iso_path_str = entry.path.to_string_lossy().replace('\\', "/");
+        let raw = iso.read_file_direct(entry)?;
+        let aklz = is_aklz(&raw);
+        let decompressed = if aklz {
+            decompress_aklz(&raw)?
+        } else {
+            raw.clone()
+        };
+
+        // Cache the original compressed bytes for fast, lossless rebuild.
+        if aklz {
+            let cpath = rel_join(&cache_dir, &iso_path_str);
+            ensure_parent(&cpath)?;
+            fs::write(&cpath, &raw)?;
+            n_aklz += 1;
+        }
+
+        let crc = crc32fast::hash(&decompressed);
+        let is_mld = iso_path_str.to_lowercase().ends_with(".mld");
+
+        if is_mld {
+            let stem = entry
+                .path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| format!("mld{n}"));
+            // mld/<dir-with-.mld-stripped>, e.g. battle/command.mld -> mld/battle/command
+            let dir_rel = iso_path_str
+                .strip_suffix(".mld")
+                .or_else(|| iso_path_str.strip_suffix(".MLD"))
+                .unwrap_or(&iso_path_str)
+                .to_string();
+            let folder = rel_join(&mld_dir, &dir_rel);
+            let stats = unpack_mld_folder(&folder, &stem, &iso_path_str, &decompressed, aklz)?;
+            tex_total += stats.textures;
+            n_mld += 1;
+            meta_entries.push(format!(
+                "    {{ \"path\": \"{}\", \"aklz\": {}, \"kind\": \"mld\", \"dir\": \"{}\", \"crc32\": \"0x{:08x}\" }}",
+                json_escape(&iso_path_str),
+                aklz,
+                json_escape(&dir_rel),
+                crc
+            ));
+        } else {
+            let fpath = rel_join(&files_dir, &iso_path_str);
+            ensure_parent(&fpath)?;
+            fs::write(&fpath, &decompressed)?;
+            meta_entries.push(format!(
+                "    {{ \"path\": \"{}\", \"aklz\": {}, \"kind\": \"file\", \"crc32\": \"0x{:08x}\" }}",
+                json_escape(&iso_path_str),
+                aklz,
+                crc
+            ));
+        }
+
+        if (n + 1) % 500 == 0 || n + 1 == files.len() {
+            println!("  [{}/{}]", n + 1, files.len());
+        }
+    }
+
+    let metadata = format!(
+        "{{\n  \"files\": [\n{}\n  ]\n}}\n",
+        meta_entries.join(",\n")
+    );
+    fs::write(out_dir.join("metadata.json"), metadata)?;
+
+    println!("\nDone.");
+    println!("  files unpacked: {}", files.len());
+    println!("  AKLZ files (cached): {n_aklz}");
+    println!("  .mld with textures: {n_mld} ({tex_total} textures)");
+    println!("  output: {}", out_dir.display());
+
+    Ok(())
+}
+
+/// Rebuild a complete ISO from a `--unpack-iso` directory (see `--build-iso`).
+fn run_build_iso(
+    unpack_dir: &Path,
+    output_iso: &Path,
+    auto_confirm: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use alx::io::{build_iso, compress_aklz};
+
+    println!("ALX_RS - ISO Builder (from scratch)");
+    println!("===================================");
+    println!("Unpack dir: {}", unpack_dir.display());
+    println!("Output ISO: {}", output_iso.display());
+
+    let meta_path = unpack_dir.join("metadata.json");
+    if !meta_path.exists() {
+        return Err(format!("metadata.json not found in {}", unpack_dir.display()).into());
+    }
+    if output_iso.exists() && !auto_confirm {
+        println!("\nOutput file already exists: {}", output_iso.display());
+        if !confirm_overwrite()? {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    let meta: serde_json::Value = serde_json::from_str(&fs::read_to_string(&meta_path)?)?;
+    let entries = meta["files"]
+        .as_array()
+        .ok_or("metadata.json: missing files array")?;
+
+    let files_dir = unpack_dir.join("files");
+    let mld_dir = unpack_dir.join("mld");
+    let cache_dir = unpack_dir.join("cache");
+    let sysdata = unpack_dir.join("&&systemdata");
+    if !sysdata.join("ISO.hdr").exists() {
+        return Err(format!("missing &&systemdata in {}", unpack_dir.display()).into());
+    }
+
+    // Stage the disc tree (with final, compressed-where-needed bytes) into a
+    // temp dir, then let gc_fst build the ISO from it.
+    let staging = std::env::temp_dir().join(format!(
+        "alx_build_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    fs::create_dir_all(&staging)?;
+
+    // Copy system files into staging/&&systemdata.
+    let staging_sys = staging.join("&&systemdata");
+    fs::create_dir_all(&staging_sys)?;
+    for f in ["ISO.hdr", "AppLoader.ldr", "Start.dol"] {
+        fs::copy(sysdata.join(f), staging_sys.join(f))?;
+    }
+
+    let mut cached = 0usize;
+    let mut recompressed = 0usize;
+    let mut changed_mld = 0usize;
+
+    for (i, entry) in entries.iter().enumerate() {
+        let path = entry["path"].as_str().ok_or("file entry missing path")?;
+        let aklz = entry["aklz"].as_bool().unwrap_or(false);
+        let kind = entry["kind"].as_str().unwrap_or("file");
+        let expected_crc = entry["crc32"]
+            .as_str()
+            .and_then(|s| u32::from_str_radix(s.trim_start_matches("0x"), 16).ok());
+
+        // Reconstruct the decompressed bytes.
+        let decompressed: Vec<u8> = if kind == "mld" {
+            let dir = entry["dir"].as_str().ok_or("mld entry missing dir")?;
+            let folder = rel_join(&mld_dir, dir);
+            let manifest: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(folder.join("manifest.json"))?)?;
+            let (blob, changed, _errs) = rebuild_mld_blob(&folder, &manifest)?;
+            if changed > 0 {
+                changed_mld += 1;
+            }
+            blob
+        } else {
+            fs::read(rel_join(&files_dir, path))?
+        };
+
+        // Choose final bytes: reuse cache if unchanged, else (re)compress.
+        let final_bytes: Vec<u8> = if aklz {
+            let crc = crc32fast::hash(&decompressed);
+            let cache_path = rel_join(&cache_dir, path);
+            if Some(crc) == expected_crc && cache_path.exists() {
+                cached += 1;
+                fs::read(&cache_path)?
+            } else {
+                recompressed += 1;
+                compress_aklz(&decompressed)
+            }
+        } else {
+            decompressed
+        };
+
+        let staged = rel_join(&staging, path);
+        ensure_parent(&staged)?;
+        fs::write(&staged, &final_bytes)?;
+
+        if (i + 1) % 500 == 0 || i + 1 == entries.len() {
+            println!("  staged [{}/{}]", i + 1, entries.len());
+        }
+    }
+
+    println!("\nBuilding ISO image...");
+    let iso_bytes = build_iso(&staging)?;
+    fs::write(output_iso, &iso_bytes)?;
+
+    let _ = fs::remove_dir_all(&staging);
+
+    println!("\nDone.");
+    println!("  files written: {}", entries.len());
+    println!("  reused from cache: {cached}");
+    println!("  recompressed: {recompressed}");
+    println!("  .mld with edited textures: {changed_mld}");
+    println!(
+        "  output: {} ({:.2} GB)",
+        output_iso.display(),
+        iso_bytes.len() as f64 / 1_000_000_000.0
+    );
 
     Ok(())
 }

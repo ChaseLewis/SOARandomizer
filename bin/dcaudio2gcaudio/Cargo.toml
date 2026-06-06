@@ -1,0 +1,13 @@
+[package]
+name = "dcaudio2gcaudio"
+version = "0.1.0"
+edition = "2021"
+description = "Render Skies of Arcadia DC/GC music banks, compare, and tune the GameCube mix"
+# GPL-3.0 because the Dreamcast format/synth code is ported from manatools
+# (github.com/dakrk/manatools, GPL-3.0). The GameCube DSP-ADPCM codec is ported
+# from DspTool (github.com/Thealexbarney/DspTool, MIT — GPL-compatible).
+license = "GPL-3.0"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+byteorder = "1.5"
